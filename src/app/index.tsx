@@ -190,137 +190,165 @@
 // });
 
 
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
 
-import {
-  getBusinessName,
-  getBusinessSubtitle,
-  getCurrency,
-  getNextReceiptNumber,
-  getReceiptWarning,
-  initializeDefaultSettings,
-} from "@/services/settingsService";
 
-import {
-  setSetting,
-} from "@/database/repositories/settingsRepository";
 
-import {
-  SETTING_KEYS,
-} from "@/constants/settings";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// import { useEffect, useState } from "react";
+// import { StyleSheet, Text, View } from "react-native";
+
+// import {
+//   getBusinessName,
+//   getBusinessSubtitle,
+//   getCurrency,
+//   getNextReceiptNumber,
+//   getReceiptWarning,
+//   initializeDefaultSettings,
+// } from "@/services/settingsService";
+
+// import {
+//   setSetting,
+// } from "@/database/repositories/settingsRepository";
+
+// import {
+//   SETTING_KEYS,
+// } from "@/constants/settings";
+
+// export default function Index() {
+//   const [status, setStatus] = useState(
+//     "Testing settings..."
+//   );
+
+//   useEffect(() => {
+//     async function runTest() {
+//       try {
+//         // Initialize defaults
+//         await initializeDefaultSettings();
+
+//         // Verify defaults
+//         const businessName = await getBusinessName();
+//         const subtitle = await getBusinessSubtitle();
+//         const currency = await getCurrency();
+//         const nextReceipt = await getNextReceiptNumber();
+//         const warning = await getReceiptWarning();
+
+//         if (businessName !== "The Stitch Center") {
+//           throw new Error("Business name default failed.");
+//         }
+
+//         if (subtitle !== "Gents Specialist") {
+//           throw new Error("Business subtitle default failed.");
+//         }
+
+//         if (currency !== "PKR") {
+//           throw new Error("Currency default failed.");
+//         }
+
+//         if (nextReceipt !== 1) {
+//           throw new Error("Receipt number default failed.");
+//         }
+
+//         if (!warning) {
+//           throw new Error("Receipt warning default failed.");
+//         }
+
+//         // Test changing a setting
+//         await setSetting(
+//           SETTING_KEYS.businessName,
+//           "Test Business"
+//         );
+
+//         const updatedName = await getBusinessName();
+
+//         if (updatedName !== "Test Business") {
+//           throw new Error("Settings update failed.");
+//         }
+
+//         // Restore the actual default
+//         await setSetting(
+//           SETTING_KEYS.businessName,
+//           "The Stitch Center"
+//         );
+
+//         const restoredName = await getBusinessName();
+
+//         if (restoredName !== "The Stitch Center") {
+//           throw new Error("Settings restore failed.");
+//         }
+
+//         setStatus(
+//           "Settings tests passed successfully."
+//         );
+//       } catch (error) {
+//         console.error("Settings test failed:", error);
+
+//         setStatus(
+//           `Settings test failed: ${error instanceof Error
+//             ? error.message
+//             : String(error)
+//           }`
+//         );
+//       }
+//     }
+
+//     runTest();
+//   }, []);
+
+//   return (
+//     <View style={styles.container}>
+//       <Text style={styles.title}>
+//         The Stitch Center
+//       </Text>
+
+//       <Text style={styles.status}>
+//         {status}
+//       </Text>
+//     </View>
+//   );
+// }
+
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//     alignItems: "center",
+//     justifyContent: "center",
+//     padding: 24,
+//   },
+
+//   title: {
+//     fontSize: 28,
+//     fontWeight: "700",
+//     color: "#17365D",
+//     marginBottom: 16,
+//   },
+
+//   status: {
+//     fontSize: 16,
+//     textAlign: "center",
+//     color: "#17202A",
+//   },
+// });
+import CustomersScreen from "@/screens/CustomersScreen";
 
 export default function Index() {
-  const [status, setStatus] = useState(
-    "Testing settings..."
-  );
-
-  useEffect(() => {
-    async function runTest() {
-      try {
-        // Initialize defaults
-        await initializeDefaultSettings();
-
-        // Verify defaults
-        const businessName = await getBusinessName();
-        const subtitle = await getBusinessSubtitle();
-        const currency = await getCurrency();
-        const nextReceipt = await getNextReceiptNumber();
-        const warning = await getReceiptWarning();
-
-        if (businessName !== "The Stitch Center") {
-          throw new Error("Business name default failed.");
-        }
-
-        if (subtitle !== "Gents Specialist") {
-          throw new Error("Business subtitle default failed.");
-        }
-
-        if (currency !== "PKR") {
-          throw new Error("Currency default failed.");
-        }
-
-        if (nextReceipt !== 1) {
-          throw new Error("Receipt number default failed.");
-        }
-
-        if (!warning) {
-          throw new Error("Receipt warning default failed.");
-        }
-
-        // Test changing a setting
-        await setSetting(
-          SETTING_KEYS.businessName,
-          "Test Business"
-        );
-
-        const updatedName = await getBusinessName();
-
-        if (updatedName !== "Test Business") {
-          throw new Error("Settings update failed.");
-        }
-
-        // Restore the actual default
-        await setSetting(
-          SETTING_KEYS.businessName,
-          "The Stitch Center"
-        );
-
-        const restoredName = await getBusinessName();
-
-        if (restoredName !== "The Stitch Center") {
-          throw new Error("Settings restore failed.");
-        }
-
-        setStatus(
-          "Settings tests passed successfully."
-        );
-      } catch (error) {
-        console.error("Settings test failed:", error);
-
-        setStatus(
-          `Settings test failed: ${error instanceof Error
-            ? error.message
-            : String(error)
-          }`
-        );
-      }
-    }
-
-    runTest();
-  }, []);
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        The Stitch Center
-      </Text>
-
-      <Text style={styles.status}>
-        {status}
-      </Text>
-    </View>
-  );
+  return <CustomersScreen />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#17365D",
-    marginBottom: 16,
-  },
-
-  status: {
-    fontSize: 16,
-    textAlign: "center",
-    color: "#17202A",
-  },
-});

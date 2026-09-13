@@ -1,9 +1,11 @@
-import { ReactNode } from "react";
 import {
+    Pressable,
     StyleSheet,
     View,
     ViewStyle,
 } from "react-native";
+
+import { ReactNode } from "react";
 
 import {
     colors,
@@ -14,27 +16,52 @@ import {
 
 type AppCardProps = {
     children: ReactNode;
+    onPress?: () => void;
     style?: ViewStyle;
 };
 
 export default function AppCard({
     children,
+    onPress,
     style,
 }: AppCardProps) {
-    return (
+    const content = (
         <View style={[styles.card, style]}>
             {children}
         </View>
     );
+
+    if (onPress) {
+        return (
+            <Pressable
+                onPress={onPress}
+                style={({ pressed }) => [
+                    styles.pressable,
+                    pressed && styles.pressed,
+                ]}
+            >
+                {content}
+            </Pressable>
+        );
+    }
+
+    return content;
 }
 
 const styles = StyleSheet.create({
+    pressable: {
+        borderRadius: radius.lg,
+    },
+
+    pressed: {
+        opacity: 0.75,
+    },
+
     card: {
-        backgroundColor: colors.surface,
+        backgroundColor: colors.background,
         borderRadius: radius.lg,
         padding: spacing.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        ...shadows.small,
+
+        ...shadows.medium,
     },
 });
