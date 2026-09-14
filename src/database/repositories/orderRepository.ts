@@ -21,6 +21,7 @@ export async function createOrder(
       customer_id,
       order_date,
       delivery_date,
+      design_type,
       tailoring_details,
       notes,
       total,
@@ -59,6 +60,7 @@ export async function getOrderById(
       receipt_number AS receiptNumber,
       customer_id AS customerId,
       order_date AS orderDate,
+      design_type AS designType,
       delivery_date AS deliveryDate,
       tailoring_details AS tailoringDetails,
       notes,
@@ -87,6 +89,7 @@ export async function getOrdersByCustomerId(
       customer_id AS customerId,
       order_date AS orderDate,
       delivery_date AS deliveryDate,
+      design_type AS designType,
       tailoring_details AS tailoringDetails,
       notes,
       total,
@@ -111,6 +114,7 @@ export async function getAllOrders(): Promise<Order[]> {
       id,
       receipt_number AS receiptNumber,
       customer_id AS customerId,
+      design_type AS designType,
       order_date AS orderDate,
       delivery_date AS deliveryDate,
       tailoring_details AS tailoringDetails,
@@ -137,6 +141,7 @@ export async function addOrderItem(
       order_id,
       name,
       quantity,
+      design_type,
       unit_price,
       notes
     )
@@ -166,6 +171,7 @@ export async function getOrderItems(
       quantity,
       unit_price AS unitPrice,
       notes
+      design_type AS designType,
     FROM order_items
     WHERE order_id = ?
     ORDER BY id ASC

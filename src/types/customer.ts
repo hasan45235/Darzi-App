@@ -1,5 +1,6 @@
 export type Customer = {
     id: number;
+    customerNumber: number;
     name: string;
     phone: string;
     photoUri: string | null;
@@ -10,6 +11,7 @@ export type Customer = {
 };
 
 export type CreateCustomerInput = {
+    customerNumber: number;
     name: string;
     phone: string;
     photoUri?: string | null;

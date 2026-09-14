@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 
 import { migrate001Initial } from "@/database/migrations/001_initial";
 import { migrate002FixOrderSchema } from "@/database/migrations/002_fix_order_date";
-import { migrate003AddTailoringDetails } from "@/database/migrations/003_add_tailoring_details";
+import { migrate004CustomerNumberAndItemOptions } from "@/database/migrations/003_customerNumberAndItemOptions";
 
 const DATABASE_NAME = "the-stitch-center.db";
 
@@ -60,12 +60,14 @@ async function runMigrations(
         );
     }
     if (currentVersion < 3) {
-        await migrate003AddTailoringDetails(db);
+        await migrate004CustomerNumberAndItemOptions(db);
 
         await db.runAsync(
-            `INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
-            3,
+            `INSERT INTO schema_migrations (version, applied_at)
+     VALUES (?, ?)`,
+            4,
             new Date().toISOString()
         );
     }
+
 }

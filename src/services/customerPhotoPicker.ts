@@ -1,12 +1,7 @@
-import {
-    Alert,
-} from "react-native";
-
 import * as ImagePicker from "expo-image-picker";
+import { Alert } from "react-native";
 
-export async function pickCustomerPhoto(): Promise<
-    string | null
-> {
+export async function pickCustomerPhoto(): Promise<string | null> {
     const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -19,24 +14,21 @@ export async function pickCustomerPhoto(): Promise<
         return null;
     }
 
-    const result =
-        await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ["images"],
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-        });
+    const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+    });
 
-    if (result.canceled || !result.assets?.length) {
+    if (result.canceled || result.assets.length === 0) {
         return null;
     }
 
     return result.assets[0].uri;
 }
 
-export async function takeCustomerPhoto(): Promise<
-    string | null
-> {
+export async function takeCustomerPhoto(): Promise<string | null> {
     const permission =
         await ImagePicker.requestCameraPermissionsAsync();
 
@@ -49,14 +41,13 @@ export async function takeCustomerPhoto(): Promise<
         return null;
     }
 
-    const result =
-        await ImagePicker.launchCameraAsync({
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-        });
+    const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+    });
 
-    if (result.canceled || !result.assets?.length) {
+    if (result.canceled || result.assets.length === 0) {
         return null;
     }
 

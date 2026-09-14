@@ -10,27 +10,27 @@ import {
     View,
 } from "react-native";
 
-import {
-    pickCustomerPhoto,
-    takeCustomerPhoto,
-} from "@/services/customerPhotoPicker";
-
 import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
 import Screen from "@/components/Screen";
-import { colors } from "@/constants/theme";
 
+import {
+    pickCustomerPhoto,
+    takeCustomerPhoto,
+} from "@/services/customerPhotoPicker";
 import { addCustomer } from "@/services/customerService";
+
+import { colors } from "@/constants/theme";
 
 export default function AddCustomerScreen() {
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [address, setAddress] = useState("");
     const [notes, setNotes] = useState("");
-    const [photoUri, setPhotoUri] =
-        useState<string | null>(null);
+
+    const [photoUri, setPhotoUri] = useState<string | null>(null);
 
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -120,31 +120,31 @@ export default function AddCustomerScreen() {
                         </AppText>
                     </View>
 
-                    <View style={styles.photoSection}>
-                        {photoUri ? (
-                            <Image
-                                source={{ uri: photoUri }}
-                                style={styles.photo}
-                            />
-                        ) : (
-                            <View style={styles.placeholder}>
-                                <AppText variant="secondary">
-                                    No Photo
-                                </AppText>
-                            </View>
-                        )}
-
-                        <AppButton
-                            title={
-                                photoUri
-                                    ? "Change Photo"
-                                    : "Add Photo"
-                            }
-                            onPress={handlePhotoOptions}
-                        />
-                    </View>
-
                     <AppCard>
+                        <View style={styles.photoSection}>
+                            {photoUri ? (
+                                <Image
+                                    source={{ uri: photoUri }}
+                                    style={styles.photo}
+                                />
+                            ) : (
+                                <View style={styles.placeholder}>
+                                    <AppText variant="secondary">
+                                        No Photo
+                                    </AppText>
+                                </View>
+                            )}
+
+                            <AppButton
+                                title={
+                                    photoUri
+                                        ? "Change Photo"
+                                        : "Add Photo"
+                                }
+                                onPress={handlePhotoOptions}
+                            />
+                        </View>
+
                         <AppInput
                             label="Name"
                             placeholder="Customer name"
@@ -188,10 +188,15 @@ export default function AddCustomerScreen() {
                         <AppButton
                             title="Cancel"
                             onPress={() => router.back()}
+                            disabled={saving}
                         />
 
                         <AppButton
-                            title={saving ? "Saving..." : "Save Customer"}
+                            title={
+                                saving
+                                    ? "Saving..."
+                                    : "Save Customer"
+                            }
                             onPress={handleSave}
                             disabled={saving}
                         />
@@ -216,11 +221,6 @@ const styles = StyleSheet.create({
         gap: 4,
     },
 
-    actions: {
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        gap: 12,
-    },
     photoSection: {
         alignItems: "center",
         gap: 12,
@@ -240,5 +240,11 @@ const styles = StyleSheet.create({
         backgroundColor: colors.secondaryLight,
         justifyContent: "center",
         alignItems: "center",
+    },
+
+    actions: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        gap: 12,
     },
 });

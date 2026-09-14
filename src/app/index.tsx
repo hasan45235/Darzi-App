@@ -352,3 +352,9 @@ import CustomersScreen from "@/screens/CustomersScreen";
 export default function Index() {
   return <CustomersScreen />;
 }
+
+// import SettingsScreen from "@/screens/SettingsScreen";
+
+// export default function Index() {
+//   return <SettingsScreen />
+// }

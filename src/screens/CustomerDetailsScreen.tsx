@@ -1,8 +1,13 @@
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import {
+    router,
+    useFocusEffect,
+    useLocalSearchParams,
+} from "expo-router";
 import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Image,
     ScrollView,
     StyleSheet,
     View,
@@ -12,23 +17,30 @@ import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppText from "@/components/AppText";
 import Screen from "@/components/Screen";
-import { colors } from "@/constants/theme";
-import { Image } from "react-native";
 
 import {
     findCustomerById,
     removeCustomer,
 } from "@/services/customerService";
 
+import { colors } from "@/constants/theme";
 import { Customer } from "@/types/customer";
 
 export default function CustomerDetailsScreen() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    const { id } =
+        useLocalSearchParams<{ id: string }>();
 
-    const [customer, setCustomer] = useState<Customer | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [deleting, setDeleting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [customer, setCustomer] =
+        useState<Customer | null>(null);
+
+    const [loading, setLoading] =
+        useState(true);
+
+    const [deleting, setDeleting] =
+        useState(false);
+
+    const [error, setError] =
+        useState<string | null>(null);
 
     const loadCustomer = useCallback(async () => {
         try {
@@ -41,7 +53,8 @@ export default function CustomerDetailsScreen() {
                 throw new Error("Invalid customer ID.");
             }
 
-            const result = await findCustomerById(customerId);
+            const result =
+                await findCustomerById(customerId);
 
             if (!result) {
                 throw new Error("Customer not found.");
@@ -109,6 +122,7 @@ export default function CustomerDetailsScreen() {
             <Screen>
                 <View style={styles.center}>
                     <ActivityIndicator size="large" />
+
                     <AppText variant="caption">
                         Loading customer...
                     </AppText>
@@ -139,7 +153,7 @@ export default function CustomerDetailsScreen() {
             <ScrollView
                 contentContainerStyle={styles.content}
             >
-                <View style={styles.header}>
+                <View style={styles.profile}>
                     {customer.photoUri ? (
                         <Image
                             source={{ uri: customer.photoUri }}
@@ -152,6 +166,7 @@ export default function CustomerDetailsScreen() {
                             </AppText>
                         </View>
                     )}
+
                     <AppText variant="title">
                         {customer.name}
                     </AppText>
@@ -197,12 +212,26 @@ export default function CustomerDetailsScreen() {
                     ) : null}
                 </AppCard>
 
+
+
                 {error ? (
                     <AppText variant="caption">
                         {error}
                     </AppText>
                 ) : null}
 
+
+                <AppButton
+                    title="View Orders"
+                    onPress={() =>
+                        router.push({
+                            pathname: "/customer-orders",
+                            params: {
+                                id: customer.id.toString(),
+                            },
+                        })
+                    }
+                />
                 <View style={styles.actions}>
                     <AppButton
                         title="Edit Customer"
@@ -217,7 +246,11 @@ export default function CustomerDetailsScreen() {
                     />
 
                     <AppButton
-                        title={deleting ? "Deleting..." : "Delete Customer"}
+                        title={
+                            deleting
+                                ? "Deleting..."
+                                : "Delete Customer"
+                        }
                         onPress={handleDelete}
                         disabled={deleting}
                     />
@@ -233,8 +266,26 @@ const styles = StyleSheet.create({
         gap: 16,
     },
 
-    header: {
-        gap: 4,
+    profile: {
+        alignItems: "center",
+        gap: 6,
+    },
+
+    photo: {
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+        marginBottom: 8,
+    },
+
+    placeholder: {
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+        backgroundColor: colors.secondaryLight,
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 8,
     },
 
     section: {
@@ -251,21 +302,5 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         gap: 12,
-    },
-    photo: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        alignSelf: "center",
-    },
-
-    placeholder: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        alignSelf: "center",
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: colors.secondaryLight,
     },
 });

@@ -1,19 +1,24 @@
-import * as FileSystem from "expo-file-system";
+import {
+    Directory,
+    File,
+    Paths,
+} from "expo-file-system";
 
-const CUSTOMER_IMAGE_DIRECTORY = "customer-images/";
+const CUSTOMER_IMAGE_DIRECTORY = "customer-images";
 
-async function ensureImageDirectory(): Promise<string> {
-    if (!FileSystem.documentDirectory) {
-        throw new Error("App document directory is unavailable.");
-    }
+function getCustomerImageDirectory(): Directory {
+    return new Directory(
+        Paths.document,
+        CUSTOMER_IMAGE_DIRECTORY
+    );
+}
 
-    const directory =
-        FileSystem.documentDirectory + CUSTOMER_IMAGE_DIRECTORY;
+function ensureImageDirectory(): Directory {
+    const directory = getCustomerImageDirectory();
 
-    const info = await FileSystem.getInfoAsync(directory);
-
-    if (!info.exists) {
-        await FileSystem.makeDirectoryAsync(directory, {
+    if (!directory.exists) {
+        directory.create({
+            idempotent: true,
             intermediates: true,
         });
     }
@@ -21,40 +26,42 @@ async function ensureImageDirectory(): Promise<string> {
     return directory;
 }
 
-export async function saveCustomerImage(
+export function saveCustomerImage(
     sourceUri: string,
     customerId: number
-): Promise<string> {
-    const directory = await ensureImageDirectory();
+): string {
+    const directory = ensureImageDirectory();
+
+    const source = new File(sourceUri);
 
     const extension =
-        sourceUri.split(".").pop()?.split("?")[0] || "jpg";
+        source.extension || ".jpg";
 
-    const destination =
-        `${directory}customer-${customerId}-${Date.now()}.${extension}`;
+    const filename =
+        `customer-${customerId}-${Date.now()}${extension}`;
 
-    await FileSystem.copyAsync({
-        from: sourceUri,
-        to: destination,
-    });
+    const destination = new File(
+        directory,
+        filename
+    );
 
-    return destination;
+    source.copy(destination);
+
+    return destination.uri;
 }
 
-export async function deleteCustomerImage(
+export function deleteCustomerImage(
     uri: string | null
-): Promise<void> {
+): void {
     if (!uri) {
         return;
     }
 
     try {
-        const info = await FileSystem.getInfoAsync(uri);
+        const file = new File(uri);
 
-        if (info.exists) {
-            await FileSystem.deleteAsync(uri, {
-                idempotent: true,
-            });
+        if (file.exists) {
+            file.delete();
         }
     } catch (error) {
         console.warn(

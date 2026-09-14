@@ -20,6 +20,7 @@ export type OrderItem = {
     quantity: number;
     unitPrice: number;
     notes: string | null;
+    designType: OrderItemDesignType;
 };
 
 export type CreateOrderInput = {
@@ -40,4 +41,11 @@ export type CreateOrderItemInput = {
     quantity: number;
     unitPrice: number;
     notes?: string | null;
+    designType: OrderItemDesignType;
 };
+
+export type OrderItemDesignType =
+    | "simple"
+    | "design";
+
+

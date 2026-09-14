@@ -6,6 +6,8 @@ import {
 import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -20,34 +22,34 @@ import AppText from "@/components/AppText";
 import Screen from "@/components/Screen";
 
 import {
-    Alert
-} from "react-native";
+    editCustomer,
+    findCustomerById,
+} from "@/services/customerService";
 
 import {
     pickCustomerPhoto,
     takeCustomerPhoto,
 } from "@/services/customerPhotoPicker";
 
-import {
-    editCustomer,
-    findCustomerById,
-} from "@/services/customerService";
+import { colors } from "@/constants/theme";
 
 export default function EditCustomerScreen() {
-    const { id } = useLocalSearchParams<{ id: string }>();
+    const { id } =
+        useLocalSearchParams<{ id: string }>();
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-
-    const [photoUri, setPhotoUri] =
-        useState<string | null>(null);
 
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [address, setAddress] = useState("");
     const [notes, setNotes] = useState("");
 
-    const [error, setError] = useState<string | null>(null);
+    const [photoUri, setPhotoUri] =
+        useState<string | null>(null);
+
+    const [error, setError] =
+        useState<string | null>(null);
 
     const loadCustomer = useCallback(async () => {
         try {
@@ -60,7 +62,8 @@ export default function EditCustomerScreen() {
                 throw new Error("Invalid customer ID.");
             }
 
-            const customer = await findCustomerById(customerId);
+            const customer =
+                await findCustomerById(customerId);
 
             if (!customer) {
                 throw new Error("Customer not found.");
@@ -88,6 +91,43 @@ export default function EditCustomerScreen() {
         }, [loadCustomer])
     );
 
+    async function handlePickPhoto() {
+        const uri = await pickCustomerPhoto();
+
+        if (uri) {
+            setPhotoUri(uri);
+        }
+    }
+
+    async function handleTakePhoto() {
+        const uri = await takeCustomerPhoto();
+
+        if (uri) {
+            setPhotoUri(uri);
+        }
+    }
+
+    function handlePhotoOptions() {
+        Alert.alert(
+            "Customer Photo",
+            "Choose how you want to add the photo.",
+            [
+                {
+                    text: "Camera",
+                    onPress: handleTakePhoto,
+                },
+                {
+                    text: "Gallery",
+                    onPress: handlePickPhoto,
+                },
+                {
+                    text: "Cancel",
+                    style: "cancel",
+                },
+            ]
+        );
+    }
+
     async function handleSave() {
         try {
             setError(null);
@@ -114,48 +154,13 @@ export default function EditCustomerScreen() {
             setSaving(false);
         }
     }
-    async function handlePickPhoto() {
-        const uri = await pickCustomerPhoto();
-
-        if (uri) {
-            setPhotoUri(uri);
-        }
-    }
-
-    async function handleTakePhoto() {
-        const uri = await takeCustomerPhoto();
-
-        if (uri) {
-            setPhotoUri(uri);
-        }
-    }
-
-    function handlePhotoOptions() {
-        Alert.alert(
-            "Customer Photo",
-            "Choose an option.",
-            [
-                {
-                    text: "Camera",
-                    onPress: handleTakePhoto,
-                },
-                {
-                    text: "Gallery",
-                    onPress: handlePickPhoto,
-                },
-                {
-                    text: "Cancel",
-                    style: "cancel",
-                },
-            ]
-        );
-    }
 
     if (loading) {
         return (
             <Screen>
                 <View style={styles.center}>
                     <ActivityIndicator size="large" />
+
                     <AppText variant="caption">
                         Loading customer...
                     </AppText>
@@ -168,7 +173,11 @@ export default function EditCustomerScreen() {
         <Screen>
             <KeyboardAvoidingView
                 style={styles.container}
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                behavior={
+                    Platform.OS === "ios"
+                        ? "padding"
+                        : undefined
+                }
             >
                 <ScrollView
                     contentContainerStyle={styles.content}
@@ -185,6 +194,30 @@ export default function EditCustomerScreen() {
                     </View>
 
                     <AppCard>
+                        <View style={styles.photoSection}>
+                            {photoUri ? (
+                                <Image
+                                    source={{ uri: photoUri }}
+                                    style={styles.photo}
+                                />
+                            ) : (
+                                <View style={styles.placeholder}>
+                                    <AppText variant="secondary">
+                                        No Photo
+                                    </AppText>
+                                </View>
+                            )}
+
+                            <AppButton
+                                title={
+                                    photoUri
+                                        ? "Change Photo"
+                                        : "Add Photo"
+                                }
+                                onPress={handlePhotoOptions}
+                            />
+                        </View>
+
                         <AppInput
                             label="Name"
                             placeholder="Customer name"
@@ -232,7 +265,11 @@ export default function EditCustomerScreen() {
                         />
 
                         <AppButton
-                            title={saving ? "Saving..." : "Save Changes"}
+                            title={
+                                saving
+                                    ? "Saving..."
+                                    : "Save Changes"
+                            }
                             onPress={handleSave}
                             disabled={saving}
                         />
@@ -255,6 +292,27 @@ const styles = StyleSheet.create({
 
     header: {
         gap: 4,
+    },
+
+    photoSection: {
+        alignItems: "center",
+        gap: 12,
+        marginBottom: 20,
+    },
+
+    photo: {
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+    },
+
+    placeholder: {
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+        backgroundColor: colors.secondaryLight,
+        justifyContent: "center",
+        alignItems: "center",
     },
 
     actions: {

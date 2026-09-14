@@ -7,6 +7,11 @@ import {
 } from "@/database/repositories/customerRepository";
 
 import {
+    advanceCustomerNumber,
+    getNextCustomerNumber,
+} from "@/services/customerNumberService";
+
+import {
     deleteCustomerImage,
     saveCustomerImage,
 } from "@/services/customerImageService";
@@ -22,7 +27,6 @@ import {
     validateCustomer,
 } from "@/utils/validation/customerValidationTemp";
 
-
 export async function addCustomer(
     input: CustomerFormInput,
     photoUri?: string | null
@@ -36,7 +40,12 @@ export async function addCustomer(
         );
     }
 
+    const customerNumber =
+        await getNextCustomerNumber();
+
+
     const customer: CreateCustomerInput = {
+        customerNumber,
         name: input.name.trim(),
         phone: input.phone.trim(),
         address: input.address?.trim() || null,
@@ -46,20 +55,28 @@ export async function addCustomer(
 
     const customerId = await createCustomer(customer);
 
-    if (photoUri) {
-        const savedPhotoUri = await saveCustomerImage(
-            photoUri,
-            customerId
-        );
+    try {
+        if (photoUri) {
+            const savedPhotoUri =
+                await saveCustomerImage(
+                    photoUri,
+                    customerId
+                );
 
-        await updateCustomer(customerId, {
-            photoUri: savedPhotoUri,
-        });
+            await updateCustomer(customerId, {
+                photoUri: savedPhotoUri,
+            });
+        }
+
+        await advanceCustomerNumber();
+
+        return customerId;
+    } catch (error) {
+        await deleteCustomer(customerId);
+
+        throw error;
     }
-
-    return customerId;
 }
-
 
 export async function findCustomerById(
     id: number

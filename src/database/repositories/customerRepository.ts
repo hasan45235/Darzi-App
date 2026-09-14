@@ -15,6 +15,7 @@ export async function createCustomer(
     INSERT INTO customers (
       name,
       phone,
+      customer_number,
       photo_uri,
       address,
       notes,
@@ -24,6 +25,7 @@ export async function createCustomer(
     VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
         input.name.trim(),
+        input.customerNumber,
         input.phone.trim(),
         input.photoUri ?? null,
         input.address?.trim() || null,
@@ -46,6 +48,7 @@ export async function getCustomerById(
       id,
       name,
       phone,
+      customer_number AS customerNumber,
       photo_uri AS photoUri,
       address,
       notes,
@@ -66,6 +69,7 @@ export async function getAllCustomers(): Promise<Customer[]> {
     SELECT
       id,
       name,
+      customer_number AS customerNumber,
       phone,
       photo_uri AS photoUri,
       address,
