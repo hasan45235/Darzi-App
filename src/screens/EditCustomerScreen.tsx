@@ -7,7 +7,6 @@ import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -19,6 +18,7 @@ import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
+import AvatarPicker from "@/components/AvatarPicker";
 import Screen from "@/components/Screen";
 
 import {
@@ -32,8 +32,6 @@ import {
 } from "@/services/customerPhotoPicker";
 
 import { resolveCustomerImageUri } from "@/services/customerImageService";
-
-import { colors } from "@/constants/theme";
 
 export default function EditCustomerScreen() {
     const { id } =
@@ -205,26 +203,11 @@ export default function EditCustomerScreen() {
 
                     <AppCard>
                         <View style={styles.photoSection}>
-                            {displayPhotoUri ? (
-                                <Image
-                                    source={{ uri: displayPhotoUri }}
-                                    style={styles.photo}
-                                />
-                            ) : (
-                                <View style={styles.placeholder}>
-                                    <AppText variant="secondary">
-                                        No Photo
-                                    </AppText>
-                                </View>
-                            )}
-
-                            <AppButton
-                                title={
-                                    photoUri
-                                        ? "Change Photo"
-                                        : "Add Photo"
-                                }
+                            <AvatarPicker
+                                name={name}
+                                photoUri={displayPhotoUri}
                                 onPress={handlePhotoOptions}
+                                size={140}
                             />
                         </View>
 
@@ -278,6 +261,7 @@ export default function EditCustomerScreen() {
                     <View style={styles.actions}>
                         <AppButton
                             title="Cancel"
+                            variant="ghost"
                             onPress={() => router.back()}
                             disabled={saving}
                         />
@@ -314,23 +298,7 @@ const styles = StyleSheet.create({
 
     photoSection: {
         alignItems: "center",
-        gap: 12,
         marginBottom: 20,
-    },
-
-    photo: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-    },
-
-    placeholder: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        backgroundColor: colors.secondaryLight,
-        justifyContent: "center",
-        alignItems: "center",
     },
 
     actions: {

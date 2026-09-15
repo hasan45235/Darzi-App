@@ -1,7 +1,8 @@
 import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/AppText";
-import CustomerAvatar from "@/components/CustomerAvatar";
+import OrderStatusBadge from "@/components/OrderStatusBadge";
+import ViewableCustomerAvatar from "@/components/ViewableCustomerAvatar";
 
 import { resolveCustomerImageUri } from "@/services/customerImageService";
 
@@ -27,12 +28,17 @@ export type ReceiptBusinessInfo = {
     warning: string;
 };
 
-type Props = {
+// Shared by the in-app preview (this component) and the exported
+// PDF/print HTML (receiptHtml.ts) - one type so both stay in sync with
+// whatever data a receipt actually needs.
+export type ReceiptData = {
     order: Order;
     items: OrderItem[];
     customer: Customer;
     business: ReceiptBusinessInfo;
 };
+
+type Props = ReceiptData;
 
 function displayDate(dateString: string): string {
     const [year, month, day] = dateString.split("-");
@@ -44,159 +50,283 @@ function displayDate(dateString: string): string {
     return `${day}-${month}-${year}`;
 }
 
-// The single source of truth for what a receipt looks like. This same
-// component renders the in-app preview today, and is meant to back a
-// PDF/print export later (Phase 5) - reusing it there instead of
-// building a second layout is what keeps the two from ever drifting
-// apart.
+// A single item's design/button-type call-outs, shown as small inline
+// tags under its name (e.g. "Custom design · Fancy buttons") instead of
+// one combined block for the whole order - the customer can see at a
+// glance exactly which item they apply to.
+function itemTags(item: OrderItem): string | null {
+    const tags: string[] = [];
+
+    if (item.designType === "design") {
+        tags.push("Custom design");
+    }
+
+    if (item.buttonType === "fancy") {
+        tags.push("Fancy buttons");
+    }
+
+    return tags.length > 0 ? tags.join(" · ") : null;
+}
+
+// The single source of truth for what a receipt looks like on screen.
+// receiptHtml.ts renders the same data as a standalone HTML document for
+// PDF export/printing/sharing - a separate file since a PDF needs plain
+// HTML/CSS rather than React Native views, but both are driven by this
+// same ReceiptData shape so neither can drift out of sync with what a
+// receipt actually contains.
 export default function ReceiptRenderer({
     order,
     items,
     customer,
     business,
 }: Props) {
-    // The "custom work" block (tailoring note + button style) only earns
-    // its place on the receipt when there's something non-default to
-    // say - a plain order with no note and stock buttons doesn't need a
-    // whole extra section just to state the obvious.
-    const hasTailoringNote = Boolean(order.tailoringDetails?.trim());
-    const hasCustomDesign = items.some(
-        (item) => item.designType === "design"
+    const subtotal = items.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice,
+        0
     );
-    const hasFancyButtons = items.some(
-        (item) => item.buttonType === "fancy"
-    );
-    const showDesignBlock =
-        hasTailoringNote || hasCustomDesign || hasFancyButtons;
+
+    const hasAdjustments = order.discount > 0 || order.addition > 0;
 
     return (
         <View style={styles.paper}>
-            <View style={styles.header}>
-                <View style={styles.businessInfo}>
+            <View style={styles.brandRow}>
+                <View style={styles.brandInfo}>
                     <AppText style={styles.businessName}>
                         {business.name}
                     </AppText>
 
                     {business.subtitle ? (
-                        <AppText variant="secondary">
+                        <AppText variant="caption" style={styles.businessSubtitle}>
                             {business.subtitle}
                         </AppText>
                     ) : null}
 
                     {business.phone ? (
-                        <AppText variant="secondary">
+                        <AppText variant="caption">
                             {business.phone}
                         </AppText>
                     ) : null}
                 </View>
 
-                <CustomerAvatar
-                    name={customer.name}
-                    photoUri={resolveCustomerImageUri(customer.photoUri)}
-                    size={64}
-                />
-            </View>
+                <View style={styles.receiptBadge}>
+                    <AppText style={styles.receiptBadgeLabel}>
+                        RECEIPT
+                    </AppText>
 
-            <AppText style={styles.customerLine}>
-                {customer.name} - {customer.customerNumber}
-            </AppText>
+                    <AppText style={styles.receiptBadgeNumber}>
+                        #{order.receiptNumber}
+                    </AppText>
+                </View>
+            </View>
 
             <View style={styles.divider} />
 
-            <View style={styles.metaRow}>
-                <AppText style={styles.metaLabel}>
-                    Receipt No. {order.receiptNumber}
-                </AppText>
-            </View>
+            <View style={styles.metaGrid}>
+                <View style={styles.metaColumn}>
+                    <AppText variant="caption" style={styles.metaLabel}>
+                        BILLED TO
+                    </AppText>
 
-            <View style={styles.metaRow}>
-                <AppText style={styles.metaLabel}>
-                    Delivery Date
-                </AppText>
+                    <View style={styles.customerRow}>
+                        <ViewableCustomerAvatar
+                            name={customer.name}
+                            photoUri={resolveCustomerImageUri(
+                                customer.photoUri
+                            )}
+                            size={40}
+                        />
 
-                <AppText variant="body">
-                    {displayDate(order.deliveryDate)}
-                </AppText>
-            </View>
-
-            {showDesignBlock ? (
-                <View style={styles.designBlock}>
-                    <View style={styles.designIcon}>
-                        <AppText style={styles.designIconText}>
-                            S
-                        </AppText>
-                    </View>
-
-                    <View style={styles.designText}>
-                        {hasTailoringNote ? (
-                            <AppText style={styles.designNote}>
-                                {order.tailoringDetails}
-                            </AppText>
-                        ) : null}
-
-                        {hasFancyButtons ? (
-                            <AppText variant="caption">
-                                Buttons - Fancy
-                            </AppText>
-                        ) : null}
-                    </View>
-                </View>
-            ) : null}
-
-            <AppText variant="secondary" style={styles.itemsHeading}>
-                Items
-            </AppText>
-
-            <View style={styles.itemsList}>
-                {items.map((item, index) => (
-                    <View key={item.id} style={styles.itemRow}>
-                        <View style={styles.itemNameRow}>
+                        <View style={styles.customerText}>
                             <AppText
-                                variant="body"
-                                style={styles.itemName}
+                                style={styles.customerName}
+                                numberOfLines={1}
                             >
-                                {index + 1}) {item.name}
+                                {customer.name}
                             </AppText>
 
-                            <AppText variant="body">
-                                Qty. {item.quantity}
+                            <AppText variant="caption" numberOfLines={1}>
+                                #{customer.customerNumber} · {customer.phone}
                             </AppText>
                         </View>
+                    </View>
+                </View>
 
-                        <AppText variant="caption">
-                            {formatCurrency(
-                                item.unitPrice,
-                                business.currency
-                            )}{" "}
-                            each
+                <View style={styles.metaColumn}>
+                    <AppText variant="caption" style={styles.metaLabel}>
+                        ORDER INFO
+                    </AppText>
+
+                    <View style={styles.metaLine}>
+                        <AppText variant="caption">Ordered</AppText>
+
+                        <AppText variant="body">
+                            {displayDate(order.orderDate)}
                         </AppText>
                     </View>
-                ))}
+
+                    <View style={styles.metaLine}>
+                        <AppText variant="caption">Delivery</AppText>
+
+                        <AppText style={styles.deliveryDate}>
+                            {displayDate(order.deliveryDate)}
+                        </AppText>
+                    </View>
+
+                    <OrderStatusBadge
+                        status={order.status}
+                        style={styles.statusBadge}
+                    />
+                </View>
             </View>
 
-            <View style={styles.totalRow}>
-                <AppText style={styles.totalLabel}>Total</AppText>
+            {order.tailoringDetails ? (
+                <View style={styles.noteBox}>
+                    <AppText variant="caption" style={styles.noteLabel}>
+                        SPECIAL INSTRUCTIONS
+                    </AppText>
 
-                <AppText style={styles.totalValue}>
-                    {formatCurrency(order.total, business.currency)}
-                </AppText>
-            </View>
-
-            {order.remaining > 0 ? (
-                <View style={styles.balanceRow}>
-                    <AppText variant="caption">Balance due</AppText>
-
-                    <AppText
-                        variant="caption"
-                        style={styles.balanceValue}
-                    >
-                        {formatCurrency(
-                            order.remaining,
-                            business.currency
-                        )}
+                    <AppText variant="body">
+                        {order.tailoringDetails}
                     </AppText>
                 </View>
             ) : null}
+
+            <View style={styles.divider} />
+
+            <View style={styles.tableHeader}>
+                <AppText
+                    variant="caption"
+                    style={[styles.th, styles.thItem]}
+                >
+                    ITEM
+                </AppText>
+
+                <AppText
+                    variant="caption"
+                    style={[styles.th, styles.thQty]}
+                >
+                    QTY
+                </AppText>
+
+                <AppText
+                    variant="caption"
+                    style={[styles.th, styles.thAmount]}
+                >
+                    AMOUNT
+                </AppText>
+            </View>
+
+            {items.map((item, index) => {
+                const tags = itemTags(item);
+
+                return (
+                    <View
+                        key={item.id}
+                        style={[
+                            styles.tableRow,
+                            index === items.length - 1 &&
+                            styles.tableRowLast,
+                        ]}
+                    >
+                        <View style={styles.thItem}>
+                            <AppText style={styles.itemName}>
+                                {item.name}
+                            </AppText>
+
+                            {tags ? (
+                                <AppText
+                                    variant="caption"
+                                    style={styles.itemTags}
+                                >
+                                    {tags}
+                                </AppText>
+                            ) : null}
+
+                            {item.notes ? (
+                                <AppText variant="caption">
+                                    {item.notes}
+                                </AppText>
+                            ) : null}
+                        </View>
+
+                        <AppText style={styles.thQty}>
+                            {item.quantity}
+                        </AppText>
+
+                        <AppText style={[styles.thAmount, styles.itemAmount]}>
+                            {formatCurrency(
+                                item.quantity * item.unitPrice,
+                                business.currency
+                            )}
+                        </AppText>
+                    </View>
+                );
+            })}
+
+            <View style={styles.divider} />
+
+            <View style={styles.totals}>
+                {hasAdjustments ? (
+                    <View style={styles.totalRow}>
+                        <AppText variant="secondary">Subtotal</AppText>
+
+                        <AppText variant="body">
+                            {formatCurrency(subtotal, business.currency)}
+                        </AppText>
+                    </View>
+                ) : null}
+
+                {order.discount > 0 ? (
+                    <View style={styles.totalRow}>
+                        <AppText variant="secondary">Discount</AppText>
+
+                        <AppText variant="body">
+                            -{formatCurrency(order.discount, business.currency)}
+                        </AppText>
+                    </View>
+                ) : null}
+
+                {order.addition > 0 ? (
+                    <View style={styles.totalRow}>
+                        <AppText variant="secondary">Addition</AppText>
+
+                        <AppText variant="body">
+                            +{formatCurrency(order.addition, business.currency)}
+                        </AppText>
+                    </View>
+                ) : null}
+
+                <View style={styles.grandTotalRow}>
+                    <AppText style={styles.grandTotalLabel}>Total</AppText>
+
+                    <AppText style={styles.grandTotalValue}>
+                        {formatCurrency(order.total, business.currency)}
+                    </AppText>
+                </View>
+
+                <View style={styles.totalRow}>
+                    <AppText variant="secondary">Paid</AppText>
+
+                    <AppText variant="body">
+                        {formatCurrency(order.paid, business.currency)}
+                    </AppText>
+                </View>
+
+                {order.remaining > 0 ? (
+                    <View style={styles.balanceRow}>
+                        <AppText style={styles.balanceLabel}>
+                            Balance Due
+                        </AppText>
+
+                        <AppText style={styles.balanceValue}>
+                            {formatCurrency(
+                                order.remaining,
+                                business.currency
+                            )}
+                        </AppText>
+                    </View>
+                ) : null}
+            </View>
 
             {business.warning ? (
                 <View style={styles.warningBox}>
@@ -205,6 +335,10 @@ export default function ReceiptRenderer({
                     </AppText>
                 </View>
             ) : null}
+
+            <AppText style={styles.thankYou}>
+                Thank you for choosing {business.name}!
+            </AppText>
         </View>
     );
 }
@@ -217,14 +351,14 @@ const styles = StyleSheet.create({
         ...shadows.medium,
     },
 
-    header: {
+    brandRow: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "flex-start",
         gap: spacing.md,
     },
 
-    businessInfo: {
+    brandInfo: {
         flex: 1,
         gap: 2,
     },
@@ -232,121 +366,203 @@ const styles = StyleSheet.create({
     businessName: {
         fontSize: fontSize.xl,
         fontWeight: fontWeight.bold,
-        color: colors.primary,
+        color: colors.secondary,
     },
 
-    customerLine: {
-        marginTop: spacing.md,
+    businessSubtitle: {
+        color: colors.primaryDark,
+    },
+
+    // A small branded badge (instead of the business info competing with
+    // a customer photo for header space) - immediately tells the reader
+    // "this is a receipt" and surfaces the receipt number without a
+    // separate meta row.
+    receiptBadge: {
+        alignItems: "flex-end",
+        backgroundColor: colors.secondary,
+        borderRadius: radius.md,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+    },
+
+    receiptBadgeLabel: {
+        fontSize: fontSize.xs,
+        fontWeight: fontWeight.semibold,
+        color: colors.primaryLight,
+        letterSpacing: 1,
+    },
+
+    receiptBadgeNumber: {
         fontSize: fontSize.lg,
         fontWeight: fontWeight.bold,
-        color: colors.secondary,
+        color: colors.white,
     },
 
     divider: {
         height: 1,
         backgroundColor: colors.border,
-        marginVertical: spacing.md,
+        marginVertical: spacing.lg,
     },
 
-    metaRow: {
+    metaGrid: {
         flexDirection: "row",
-        justifyContent: "space-between",
-        marginBottom: spacing.xs,
+        gap: spacing.lg,
     },
 
-    metaLabel: {
-        fontWeight: fontWeight.semibold,
-        color: colors.secondary,
-    },
-
-    designBlock: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.md,
-        backgroundColor: colors.background,
-        borderRadius: radius.md,
-        padding: spacing.md,
-        marginTop: spacing.md,
-    },
-
-    designIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: radius.sm,
-        borderWidth: 2,
-        borderColor: colors.secondary,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    designIconText: {
-        fontWeight: fontWeight.bold,
-        color: colors.secondary,
-    },
-
-    designText: {
+    metaColumn: {
         flex: 1,
-        gap: 2,
-    },
-
-    designNote: {
-        fontWeight: fontWeight.semibold,
-        color: colors.secondary,
-    },
-
-    itemsHeading: {
-        marginTop: spacing.lg,
-        marginBottom: spacing.xs,
-    },
-
-    itemsList: {
         gap: spacing.sm,
     },
 
-    itemRow: {
-        gap: 2,
+    metaLabel: {
+        letterSpacing: 0.5,
+        color: colors.textMuted,
     },
 
-    itemNameRow: {
+    customerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+    },
+
+    customerText: {
+        flex: 1,
+        gap: 1,
+    },
+
+    customerName: {
+        fontSize: fontSize.md,
+        fontWeight: fontWeight.semibold,
+        color: colors.text,
+    },
+
+    metaLine: {
         flexDirection: "row",
         justifyContent: "space-between",
     },
 
-    itemName: {
+    deliveryDate: {
+        fontWeight: fontWeight.semibold,
+        color: colors.primaryDark,
+    },
+
+    statusBadge: {
+        marginTop: 2,
+    },
+
+    noteBox: {
+        marginTop: spacing.lg,
+        backgroundColor: colors.background,
+        borderLeftWidth: 3,
+        borderLeftColor: colors.primary,
+        borderRadius: radius.sm,
+        padding: spacing.md,
+        gap: 2,
+    },
+
+    noteLabel: {
+        letterSpacing: 0.5,
+        color: colors.textMuted,
+    },
+
+    tableHeader: {
+        flexDirection: "row",
+        marginBottom: spacing.sm,
+    },
+
+    th: {
+        letterSpacing: 0.5,
+        color: colors.textMuted,
+    },
+
+    thItem: {
         flex: 1,
+    },
+
+    thQty: {
+        width: 40,
+        textAlign: "center",
+    },
+
+    thAmount: {
+        width: 92,
+        textAlign: "right",
+    },
+
+    tableRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        paddingVertical: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+
+    tableRowLast: {
+        borderBottomWidth: 0,
+    },
+
+    itemName: {
         fontWeight: fontWeight.medium,
+    },
+
+    itemTags: {
+        color: colors.primaryDark,
+    },
+
+    itemAmount: {
+        fontWeight: fontWeight.medium,
+    },
+
+    totals: {
+        gap: spacing.xs,
     },
 
     totalRow: {
         flexDirection: "row",
         justifyContent: "space-between",
+    },
+
+    grandTotalRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
         alignItems: "center",
-        marginTop: spacing.lg,
-        paddingTop: spacing.md,
+        marginTop: spacing.xs,
+        paddingTop: spacing.sm,
         borderTopWidth: 1,
         borderTopColor: colors.border,
     },
 
-    totalLabel: {
+    grandTotalLabel: {
+        fontSize: fontSize.md,
         fontWeight: fontWeight.semibold,
         color: colors.textSecondary,
     },
 
-    totalValue: {
+    grandTotalValue: {
         fontSize: fontSize.huge,
         fontWeight: fontWeight.bold,
-        color: colors.text,
+        color: colors.secondary,
     },
 
     balanceRow: {
         flexDirection: "row",
         justifyContent: "space-between",
+        alignItems: "center",
         marginTop: spacing.xs,
+        paddingTop: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: colors.dangerLight,
+    },
+
+    balanceLabel: {
+        fontWeight: fontWeight.semibold,
+        color: colors.danger,
     },
 
     balanceValue: {
+        fontSize: fontSize.lg,
+        fontWeight: fontWeight.bold,
         color: colors.danger,
-        fontWeight: fontWeight.semibold,
     },
 
     warningBox: {
@@ -362,5 +578,12 @@ const styles = StyleSheet.create({
         color: colors.danger,
         fontWeight: fontWeight.medium,
         fontSize: fontSize.sm,
+    },
+
+    thankYou: {
+        textAlign: "center",
+        marginTop: spacing.lg,
+        color: colors.textSecondary,
+        fontStyle: "italic",
     },
 });

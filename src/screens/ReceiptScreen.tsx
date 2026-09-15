@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import {
     router,
     useFocusEffect,
@@ -6,6 +7,7 @@ import {
 import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     ScrollView,
     StyleSheet,
     View,
@@ -14,7 +16,7 @@ import {
 import AppButton from "@/components/AppButton";
 import AppText from "@/components/AppText";
 import ReceiptRenderer, {
-    ReceiptBusinessInfo,
+    ReceiptData,
 } from "@/components/ReceiptRenderer";
 import Screen from "@/components/Screen";
 
@@ -26,6 +28,11 @@ import {
 } from "@/services/orderService";
 
 import {
+    printReceipt,
+    shareReceipt,
+} from "@/services/receiptExportService";
+
+import {
     getBusinessName,
     getBusinessPhone,
     getBusinessSubtitle,
@@ -33,15 +40,7 @@ import {
     getReceiptWarning,
 } from "@/services/settingsService";
 
-import { Customer } from "@/types/customer";
-import { Order, OrderItem } from "@/types/order";
-
-type ReceiptData = {
-    order: Order;
-    items: OrderItem[];
-    customer: Customer;
-    business: ReceiptBusinessInfo;
-};
+import { colors } from "@/constants/theme";
 
 export default function ReceiptScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,6 +48,8 @@ export default function ReceiptScreen() {
     const [data, setData] = useState<ReceiptData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [sharing, setSharing] = useState(false);
+    const [printing, setPrinting] = useState(false);
 
     const loadReceipt = useCallback(async () => {
         try {
@@ -118,6 +119,57 @@ export default function ReceiptScreen() {
         }, [loadReceipt])
     );
 
+    async function handleShare() {
+        if (!data) {
+            return;
+        }
+
+        try {
+            setSharing(true);
+
+            await shareReceipt(data);
+        } catch (error) {
+            Alert.alert(
+                "Couldn't share receipt",
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong."
+            );
+        } finally {
+            setSharing(false);
+        }
+    }
+
+    async function handlePrint() {
+        if (!data) {
+            return;
+        }
+
+        try {
+            setPrinting(true);
+
+            await printReceipt(data);
+        } catch (error) {
+            // iOS rejects printAsync's promise when the user just closes
+            // the print sheet without printing (Android instead resolves
+            // normally in that case) - that's a cancel, not a failure, so
+            // it shouldn't surface as an error.
+            const message =
+                error instanceof Error ? error.message : "";
+
+            if (message.toLowerCase().includes("cancel")) {
+                return;
+            }
+
+            Alert.alert(
+                "Couldn't print receipt",
+                message || "Something went wrong."
+            );
+        } finally {
+            setPrinting(false);
+        }
+    }
+
     if (loading) {
         return (
             <Screen>
@@ -162,14 +214,43 @@ export default function ReceiptScreen() {
                     business={data.business}
                 />
 
-                {/* Sharing/printing this as an actual file (PDF, or an
-                image to send over WhatsApp) is the next phase - for now
-                this screen is the receipt's in-app preview, and the
-                renderer above is already built to be reused unchanged
-                once that export step exists. */}
-                <AppText variant="caption" style={styles.note}>
-                    Sharing and printing are coming in the next update.
-                </AppText>
+                {/* Share (send the PDF to WhatsApp, Drive, Files, etc.
+                via the OS share sheet) is the action a tailor reaches for
+                most, so it gets the primary/filled button; Print (a
+                physical printer, or "Save as PDF" through the system
+                print dialog) is the secondary, outline one. */}
+                <View style={styles.actions}>
+                    <AppButton
+                        title="Share"
+                        onPress={handleShare}
+                        loading={sharing}
+                        disabled={printing}
+                        icon={
+                            <Ionicons
+                                name="share-social-outline"
+                                size={18}
+                                color={colors.white}
+                            />
+                        }
+                        style={styles.actionButton}
+                    />
+
+                    <AppButton
+                        title="Print"
+                        variant="outline"
+                        onPress={handlePrint}
+                        loading={printing}
+                        disabled={sharing}
+                        icon={
+                            <Ionicons
+                                name="print-outline"
+                                size={18}
+                                color={colors.primary}
+                            />
+                        }
+                        style={styles.actionButton}
+                    />
+                </View>
             </ScrollView>
         </Screen>
     );
@@ -180,9 +261,14 @@ const styles = StyleSheet.create({
         paddingBottom: 32,
     },
 
-    note: {
-        textAlign: "center",
+    actions: {
+        flexDirection: "row",
+        gap: 12,
         marginTop: 16,
+    },
+
+    actionButton: {
+        flex: 1,
     },
 
     center: {

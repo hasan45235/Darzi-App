@@ -18,7 +18,10 @@ import {
 type AppButtonProps = {
     title: string;
     onPress: () => void;
-    variant?: "primary" | "secondary" | "danger" | "outline";
+    // "ghost" is for a screen's lowest-emphasis action (e.g. "Cancel"
+    // next to a primary "Save") - text only, no fill or border, so it
+    // doesn't visually compete with the action that actually matters.
+    variant?: "primary" | "secondary" | "danger" | "outline" | "ghost";
     loading?: boolean;
     disabled?: boolean;
     style?: ViewStyle;
@@ -76,6 +79,9 @@ function getTextColor(
         case "outline":
             return colors.primary;
 
+        case "ghost":
+            return colors.textSecondary;
+
         case "secondary":
             return colors.white;
 
@@ -91,7 +97,11 @@ function getTextColor(
 const styles = StyleSheet.create({
     base: {
         minHeight: 48,
-        paddingHorizontal: spacing.xl,
+        // Tighter than before (was spacing.xl) - a full-width filled
+        // button doesn't need extra horizontal breathing room the way a
+        // pill-shaped chip does, and the old value made every button
+        // read as a heavier block than it needed to.
+        paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
         borderRadius: radius.md,
         alignItems: "center",
@@ -116,6 +126,11 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.primary,
+    },
+
+    ghost: {
+        backgroundColor: "transparent",
+        minHeight: 40,
     },
 
     text: {

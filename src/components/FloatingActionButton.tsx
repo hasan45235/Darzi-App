@@ -1,26 +1,33 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, ViewStyle } from "react-native";
-
-import AppText from "@/components/AppText";
 
 import { colors, shadows, spacing } from "@/constants/theme";
 
 type Props = {
     onPress: () => void;
-    // Screen-reader label - the button itself only shows a "+" glyph, so
-    // this is what accessibility tools actually announce.
+    // Screen-reader label - the button only shows an icon, so this is
+    // what accessibility tools actually announce.
     label: string;
+    // Defaults to "+" (the "add new" action Customers/Orders use this
+    // for) - other screens can pass their own primary action's icon
+    // instead (e.g. "receipt-outline" for "view orders").
+    icon?: keyof typeof Ionicons.glyphMap;
     style?: ViewStyle;
 };
 
-const SIZE = 58;
+const SIZE = 56;
 
-// A circular "add new" button that floats above a screen's content,
-// anchored bottom-right. Used on Customers and Orders as the primary
-// way to start creating one, instead of a button competing for space
-// in the header.
+// A circular button that floats above a screen's content, anchored
+// bottom-right, for that screen's single most important action - "add
+// new" on Customers/Orders, but reusable for any one primary action.
+// This is the one element in the app that's meant to look elevated -
+// a FAB floating above the page is a real, deliberate affordance
+// (Material Design's own spec), unlike the flat cards and list rows
+// everywhere else.
 export default function FloatingActionButton({
     onPress,
     label,
+    icon = "add",
     style,
 }: Props) {
     return (
@@ -35,7 +42,7 @@ export default function FloatingActionButton({
                 style,
             ]}
         >
-            <AppText style={styles.icon}>+</AppText>
+            <Ionicons name={icon} size={26} color={colors.white} />
         </Pressable>
     );
 }
@@ -57,13 +64,5 @@ const styles = StyleSheet.create({
     pressed: {
         opacity: 0.85,
         transform: [{ scale: 0.96 }],
-    },
-
-    icon: {
-        color: colors.white,
-        fontSize: 30,
-        fontWeight: "600",
-        lineHeight: 34,
-        marginTop: -2,
     },
 });

@@ -1,4 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import {
+    useCallback,
     useEffect,
     useMemo,
     useState,
@@ -7,6 +9,7 @@ import {
 import {
     ActivityIndicator,
     Alert,
+    FlatList,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -17,6 +20,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 
 import {
     router,
+    useFocusEffect,
     useLocalSearchParams,
 } from "expo-router";
 
@@ -24,12 +28,13 @@ import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
+import CustomerAvatar from "@/components/CustomerAvatar";
+import ListRow from "@/components/ListRow";
 import OrderStatusBadge from "@/components/OrderStatusBadge";
 import Screen from "@/components/Screen";
 
-import {
-    findCustomerById,
-} from "@/services/customerService";
+import { getActiveCustomers } from "@/services/customerService";
+import { resolveCustomerImageUri } from "@/services/customerImageService";
 
 import {
     createCompleteOrder,
@@ -43,13 +48,18 @@ import {
     getBasicSuitPrice,
 } from "@/services/settingsService";
 
-import { colors } from "@/constants/theme";
+import { colors, fontWeight } from "@/constants/theme";
 import { DEFAULT_ORDER_STATUS } from "@/constants/orderStatus";
 import { Customer } from "@/types/customer";
 import { ButtonType, DesignType } from "@/types/order";
 
 type DraftItem = NewOrderItem & {
     id: string;
+    // True when this item came from a quick-fill preset (Suit/Pant/
+    // Shirt) - its name and price are already known, so those two
+    // fields lock instead of staying editable like a manually-typed
+    // item's would.
+    isPreset: boolean;
 };
 
 // A quick-fill preset backed by the "Basic Item Prices" settings, so
@@ -73,6 +83,7 @@ function createEmptyItem(preset?: {
         notes: "",
         designType: "simple",
         buttonType: "simple",
+        isPreset: Boolean(preset),
     };
 }
 
@@ -106,13 +117,87 @@ export default function CreateOrderScreen() {
             customerId?: string;
         }>();
 
-    const customerId = Number(
-        params.customerId
-    );
+    // --- Customer selection ------------------------------------------
+    // No more "pick a customer, then navigate here" - the tailor lands
+    // on this screen directly and searches/selects a customer inline.
+    // An incoming `customerId` (from a customer's own "Create Order"
+    // button) still pre-selects that customer, but it's just a
+    // starting point - "Change" below lets it be swapped freely.
+    const [customers, setCustomers] =
+        useState<Customer[]>([]);
 
-    const [customer, setCustomer] =
+    const [loadingCustomers, setLoadingCustomers] =
+        useState(true);
+
+    const [customerSearch, setCustomerSearch] =
+        useState("");
+
+    const [selectedCustomer, setSelectedCustomer] =
         useState<Customer | null>(null);
 
+    const [appliedInitialCustomer, setAppliedInitialCustomer] =
+        useState(false);
+
+    const loadCustomers = useCallback(async () => {
+        try {
+            setLoadingCustomers(true);
+            setCustomers(await getActiveCustomers());
+        } catch (error) {
+            console.error(
+                "Failed to load customers:",
+                error
+            );
+        } finally {
+            setLoadingCustomers(false);
+        }
+    }, []);
+
+    // Refreshes on every focus, so returning from "Add New Customer"
+    // (opened from the search step below) shows the new customer
+    // immediately without needing a manual pull-to-refresh.
+    useFocusEffect(
+        useCallback(() => {
+            loadCustomers();
+        }, [loadCustomers])
+    );
+
+    useEffect(() => {
+        if (appliedInitialCustomer || customers.length === 0) {
+            return;
+        }
+
+        const initialId = Number(params.customerId);
+
+        if (Number.isInteger(initialId)) {
+            const match = customers.find(
+                (customer) => customer.id === initialId
+            );
+
+            if (match) {
+                setSelectedCustomer(match);
+            }
+        }
+
+        setAppliedInitialCustomer(true);
+    }, [customers, params.customerId, appliedInitialCustomer]);
+
+    const filteredCustomers = useMemo(() => {
+        const query = customerSearch.trim().toLowerCase();
+
+        if (!query) {
+            return customers;
+        }
+
+        return customers.filter((customer) => {
+            return (
+                customer.name.toLowerCase().includes(query) ||
+                customer.phone.toLowerCase().includes(query) ||
+                customer.customerNumber.toString().includes(query)
+            );
+        });
+    }, [customers, customerSearch]);
+
+    // --- Order form -----------------------------------------------------
     const [receiptNumber, setReceiptNumber] =
         useState<number | null>(null);
 
@@ -132,10 +217,12 @@ export default function CreateOrderScreen() {
     const [notes, setNotes] =
         useState("");
 
+    // Starts empty - a blank item block used to be pre-added here, but
+    // that meant every new order opened with an empty, half-finished
+    // "item" already sitting in the form. Now nothing shows until the
+    // tailor actually taps "Add Item" or a quick-fill preset.
     const [items, setItems] =
-        useState<DraftItem[]>([
-            createEmptyItem(),
-        ]);
+        useState<DraftItem[]>([]);
 
     const [paid, setPaid] =
         useState("");
@@ -149,42 +236,31 @@ export default function CreateOrderScreen() {
     const [quickFillPresets, setQuickFillPresets] =
         useState<QuickFillPreset[]>([]);
 
-    const [loading, setLoading] =
+    const [loadingForm, setLoadingForm] =
         useState(true);
 
     const [saving, setSaving] =
         useState(false);
 
+    // Receipt number and quick-fill presets don't depend on which
+    // customer ends up selected, so they load once up front instead of
+    // waiting on a customer pick - by the time one is chosen, the rest
+    // of the form is already ready to show.
     useEffect(() => {
         async function load() {
             try {
-                if (!Number.isInteger(customerId)) {
-                    throw new Error(
-                        "Invalid customer."
-                    );
-                }
-
                 const [
-                    customerResult,
                     nextReceipt,
                     suitPrice,
                     pantPrice,
                     shirtPrice,
                 ] = await Promise.all([
-                    findCustomerById(customerId),
                     getNextOrderReceiptNumber(),
                     getBasicSuitPrice(),
                     getBasicPantPrice(),
                     getBasicShirtPrice(),
                 ]);
 
-                if (!customerResult) {
-                    throw new Error(
-                        "Customer not found."
-                    );
-                }
-
-                setCustomer(customerResult);
                 setReceiptNumber(nextReceipt);
 
                 setQuickFillPresets([
@@ -200,19 +276,15 @@ export default function CreateOrderScreen() {
 
                 Alert.alert(
                     "Error",
-                    error instanceof Error
-                        ? error.message
-                        : "Failed to prepare order."
+                    "Failed to prepare order."
                 );
-
-                router.back();
             } finally {
-                setLoading(false);
+                setLoadingForm(false);
             }
         }
 
         load();
-    }, [customerId]);
+    }, []);
 
     const subtotal = useMemo(() => {
         return items.reduce(
@@ -253,10 +325,6 @@ export default function CreateOrderScreen() {
     }
 
     function removeItem(id: string) {
-        if (items.length === 1) {
-            return;
-        }
-
         setItems((current) =>
             current.filter(
                 (item) => item.id !== id
@@ -265,6 +333,14 @@ export default function CreateOrderScreen() {
     }
 
     async function handleSave() {
+        if (!selectedCustomer) {
+            Alert.alert(
+                "Select a customer",
+                "Please select the customer this order is for."
+            );
+            return;
+        }
+
         if (!deliveryDate) {
             Alert.alert(
                 "Delivery date required",
@@ -318,7 +394,7 @@ export default function CreateOrderScreen() {
 
             const orderId =
                 await createCompleteOrder({
-                    customerId,
+                    customerId: selectedCustomer.id,
                     orderDate,
                     deliveryDate,
                     tailoringDetails,
@@ -356,7 +432,7 @@ export default function CreateOrderScreen() {
                                 pathname:
                                     "/customer-orders",
                                 params: {
-                                    id: customerId.toString(),
+                                    id: selectedCustomer.id.toString(),
                                 },
                             });
                         },
@@ -385,7 +461,7 @@ export default function CreateOrderScreen() {
         }
     }
 
-    if (loading) {
+    if (loadingCustomers || loadingForm) {
         return (
             <Screen>
                 <View style={styles.center}>
@@ -399,6 +475,92 @@ export default function CreateOrderScreen() {
         );
     }
 
+    // --- Step 1: search and select a customer ---------------------------
+    if (!selectedCustomer) {
+        return (
+            <Screen>
+                <View style={styles.header}>
+                    <AppText variant="title">
+                        Create Order
+                    </AppText>
+
+                    <AppText variant="caption">
+                        Search and select the customer this order is for.
+                    </AppText>
+                </View>
+
+                <AppInput
+                    placeholder="Search by name, phone, or customer #"
+                    value={customerSearch}
+                    onChangeText={setCustomerSearch}
+                    autoFocus
+                />
+
+                {customers.length === 0 ? (
+                    <View style={styles.center}>
+                        <AppText variant="secondary">
+                            No customers yet
+                        </AppText>
+
+                        <AppText variant="caption">
+                            Add a customer first to create an order for them.
+                        </AppText>
+
+                        <AppButton
+                            title="Add New Customer"
+                            variant="outline"
+                            onPress={() => router.push("/add-customer")}
+                        />
+                    </View>
+                ) : filteredCustomers.length === 0 ? (
+                    <View style={styles.center}>
+                        <AppText variant="secondary">
+                            No customers found
+                        </AppText>
+
+                        <AppText variant="caption">
+                            Try a different name, phone, or customer number.
+                        </AppText>
+
+                        <AppButton
+                            title="Add New Customer"
+                            variant="outline"
+                            onPress={() => router.push("/add-customer")}
+                        />
+                    </View>
+                ) : (
+                    <FlatList
+                        data={filteredCustomers}
+                        keyExtractor={(item) => item.id.toString()}
+                        contentContainerStyle={styles.customerList}
+                        keyboardShouldPersistTaps="handled"
+                        ItemSeparatorComponent={() => (
+                            <View style={styles.separator} />
+                        )}
+                        renderItem={({ item }) => (
+                            <ListRow
+                                onPress={() => setSelectedCustomer(item)}
+                                leading={
+                                    <CustomerAvatar
+                                        name={item.name}
+                                        photoUri={resolveCustomerImageUri(
+                                            item.photoUri
+                                        )}
+                                        size={44}
+                                    />
+                                }
+                                title={item.name}
+                                subtitle={item.phone}
+                                caption={`#${item.customerNumber}`}
+                            />
+                        )}
+                    />
+                )}
+            </Screen>
+        );
+    }
+
+    // --- Step 2: the order form itself -----------------------------------
     return (
         <Screen>
             <ScrollView
@@ -411,26 +573,47 @@ export default function CreateOrderScreen() {
                     <AppText variant="title">
                         Create Order
                     </AppText>
-
-                    <AppText variant="caption">
-                        {customer?.name}
-                    </AppText>
                 </View>
+
+                <AppCard>
+                    <View style={styles.customerRow}>
+                        <CustomerAvatar
+                            name={selectedCustomer.name}
+                            photoUri={resolveCustomerImageUri(
+                                selectedCustomer.photoUri
+                            )}
+                            size={44}
+                        />
+
+                        <View style={styles.customerInfo}>
+                            <AppText variant="secondary">
+                                {selectedCustomer.name}
+                            </AppText>
+
+                            <AppText variant="caption">
+                                #{selectedCustomer.customerNumber} ·{" "}
+                                {selectedCustomer.phone}
+                            </AppText>
+                        </View>
+
+                        <Pressable
+                            onPress={() => setSelectedCustomer(null)}
+                            hitSlop={8}
+                        >
+                            <AppText
+                                variant="caption"
+                                style={styles.changeLink}
+                            >
+                                Change
+                            </AppText>
+                        </Pressable>
+                    </View>
+                </AppCard>
 
                 <AppCard>
                     <AppText variant="secondary">
                         Order Information
                     </AppText>
-
-                    <View style={styles.field}>
-                        <AppText variant="caption">
-                            Customer
-                        </AppText>
-
-                        <AppText variant="body">
-                            {customer?.name}
-                        </AppText>
-                    </View>
 
                     <View style={styles.field}>
                         <AppText variant="caption">
@@ -509,6 +692,18 @@ export default function CreateOrderScreen() {
                                         );
                                     }
                                 }}
+                                // onValueChange only fires when a date is
+                                // actually picked - cancelling the dialog
+                                // never called it, so showDatePicker stayed
+                                // true forever and the picker kept
+                                // reappearing on every unrelated tap
+                                // (each re-render passed a fresh `value`,
+                                // which re-triggered the native dialog
+                                // while it was still "open"). onDismiss is
+                                // the library's dedicated cancel callback.
+                                onDismiss={() =>
+                                    setShowDatePicker(false)
+                                }
                             />
                         ) : null}
                     </View>
@@ -572,6 +767,16 @@ export default function CreateOrderScreen() {
                         ))}
                     </View>
 
+                    {items.length === 0 ? (
+                        <AppText
+                            variant="caption"
+                            style={styles.emptyItemsHint}
+                        >
+                            No items yet - tap "Add Item" or a quick-fill
+                            button above to add one.
+                        </AppText>
+                    ) : null}
+
                     {items.map(
                         (item, index) => (
                             <View
@@ -585,24 +790,28 @@ export default function CreateOrderScreen() {
                                         Item {index + 1}
                                     </AppText>
 
-                                    {items.length > 1 ? (
-                                        <Pressable
-                                            onPress={() =>
-                                                removeItem(
-                                                    item.id
-                                                )
-                                            }
-                                        >
-                                            <AppText variant="caption">
-                                                Remove
-                                            </AppText>
-                                        </Pressable>
-                                    ) : null}
+                                    <Pressable
+                                        onPress={() =>
+                                            removeItem(
+                                                item.id
+                                            )
+                                        }
+                                    >
+                                        <AppText variant="caption">
+                                            Remove
+                                        </AppText>
+                                    </Pressable>
                                 </View>
 
                                 <AppInput
                                     placeholder="Item name"
                                     value={item.name}
+                                    editable={!item.isPreset}
+                                    style={
+                                        item.isPreset
+                                            ? styles.lockedInput
+                                            : undefined
+                                    }
                                     onChangeText={(value) =>
                                         updateItem(
                                             item.id,
@@ -623,33 +832,74 @@ export default function CreateOrderScreen() {
                                             styles.half
                                         }
                                     >
-                                        <AppInput
-                                            placeholder="Quantity"
-                                            value={String(
-                                                item.quantity
-                                            )}
-                                            keyboardType="decimal-pad"
-                                            onChangeText={(
-                                                value
-                                            ) => {
-                                                const number =
-                                                    Number(
-                                                        value
-                                                    );
+                                        <AppText
+                                            variant="caption"
+                                            style={styles.stepperLabel}
+                                        >
+                                            Quantity
+                                        </AppText>
 
-                                                updateItem(
-                                                    item.id,
-                                                    {
-                                                        quantity:
-                                                            Number.isFinite(
-                                                                number
-                                                            )
-                                                                ? number
-                                                                : 0,
+                                        {/* Quantity is a stepper, not a
+                                        text field - it only ever needs to
+                                        go up or down by one, and typing a
+                                        number on a numeric keyboard is
+                                        slower and more error-prone than
+                                        tapping +/- for that. */}
+                                        <View style={styles.stepper}>
+                                            <Pressable
+                                                onPress={() =>
+                                                    updateItem(item.id, {
+                                                        quantity: Math.max(
+                                                            1,
+                                                            item.quantity - 1
+                                                        ),
+                                                    })
+                                                }
+                                                disabled={
+                                                    item.quantity <= 1
+                                                }
+                                                hitSlop={8}
+                                                style={[
+                                                    styles.stepperButton,
+                                                    item.quantity <= 1 &&
+                                                    styles.stepperButtonDisabled,
+                                                ]}
+                                            >
+                                                <Ionicons
+                                                    name="remove"
+                                                    size={18}
+                                                    color={
+                                                        item.quantity <= 1
+                                                            ? colors.textMuted
+                                                            : colors.primary
                                                     }
-                                                );
-                                            }}
-                                        />
+                                                />
+                                            </Pressable>
+
+                                            <AppText
+                                                variant="body"
+                                                style={styles.stepperValue}
+                                            >
+                                                {item.quantity}
+                                            </AppText>
+
+                                            <Pressable
+                                                onPress={() =>
+                                                    updateItem(item.id, {
+                                                        quantity:
+                                                            item.quantity + 1,
+                                                    })
+                                                }
+                                                hitSlop={8}
+                                                style={styles.stepperButton}
+                                            >
+                                                <Ionicons
+                                                    name="add"
+                                                    size={18}
+                                                    color={colors.primary}
+                                                />
+                                            </Pressable>
+                                        </View>
                                     </View>
 
                                     <View
@@ -658,7 +908,8 @@ export default function CreateOrderScreen() {
                                         }
                                     >
                                         <AppInput
-                                            placeholder="Unit price"
+                                            label="Unit Price"
+                                            placeholder="0"
                                             value={
                                                 item.unitPrice ===
                                                     0
@@ -666,6 +917,12 @@ export default function CreateOrderScreen() {
                                                     : String(
                                                         item.unitPrice
                                                     )
+                                            }
+                                            editable={!item.isPreset}
+                                            style={
+                                                item.isPreset
+                                                    ? styles.lockedInput
+                                                    : undefined
                                             }
                                             keyboardType="decimal-pad"
                                             onChangeText={(
@@ -907,6 +1164,15 @@ export default function CreateOrderScreen() {
                             ? "Saving..."
                             : "Save Order"
                     }
+                    icon={
+                        saving ? null : (
+                            <Ionicons
+                                name="checkmark"
+                                size={18}
+                                color={colors.white}
+                            />
+                        )
+                    }
                     onPress={handleSave}
                     disabled={saving}
                 />
@@ -923,6 +1189,32 @@ const styles = StyleSheet.create({
 
     header: {
         gap: 4,
+        marginBottom: 16,
+    },
+
+    customerList: {
+        paddingBottom: 24,
+    },
+
+    separator: {
+        height: 1,
+        backgroundColor: colors.border,
+    },
+
+    customerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+    },
+
+    customerInfo: {
+        flex: 1,
+        gap: 2,
+    },
+
+    changeLink: {
+        color: colors.primary,
+        fontWeight: fontWeight.semibold,
     },
 
     field: {
@@ -985,6 +1277,50 @@ const styles = StyleSheet.create({
 
     designTypeTextActive: {
         color: colors.white,
+    },
+
+    emptyItemsHint: {
+        paddingVertical: 8,
+    },
+
+    lockedInput: {
+        backgroundColor: colors.background,
+        color: colors.textSecondary,
+    },
+
+    stepperLabel: {
+        marginBottom: 8,
+        fontWeight: fontWeight.medium,
+        color: colors.text,
+    },
+
+    stepper: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        minHeight: 48,
+        borderWidth: 1,
+        borderRadius: 10,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+        paddingHorizontal: 4,
+    },
+
+    stepperButton: {
+        width: 40,
+        height: 40,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    stepperButtonDisabled: {
+        opacity: 0.4,
+    },
+
+    stepperValue: {
+        flex: 1,
+        textAlign: "center",
+        fontWeight: fontWeight.semibold,
     },
 
     item: {

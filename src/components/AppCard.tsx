@@ -10,7 +10,6 @@ import { ReactNode } from "react";
 import {
     colors,
     radius,
-    shadows,
     spacing,
 } from "@/constants/theme";
 
@@ -57,11 +56,16 @@ const styles = StyleSheet.create({
         opacity: 0.75,
     },
 
+    // Flat by design: a hairline border on a white surface reads as a
+    // distinct, tappable block against the ivory screen background
+    // without needing a drop shadow - current mobile UI convention
+    // favors this over "floating box" shadows, which read as dated and
+    // visually heavy when repeated down a whole screen.
     card: {
-        backgroundColor: colors.background,
+        backgroundColor: colors.surface,
         borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
         padding: spacing.lg,
-
-        ...shadows.medium,
     },
 });

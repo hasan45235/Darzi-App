@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import {
     router,
     useFocusEffect,
@@ -15,13 +16,15 @@ import {
 import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppText from "@/components/AppText";
-import OrderStatusPicker from "@/components/OrderStatusPicker";
+import IconActionButton from "@/components/IconActionButton";
+import OrderStatusBadge from "@/components/OrderStatusBadge";
 import Screen from "@/components/Screen";
+
+import { useConfirm } from "@/providers/ConfirmDialogProvider";
 
 import { findCustomerById } from "@/services/customerService";
 
 import {
-    changeOrderStatus,
     findOrderById,
     getItemsForOrder,
     removeOrder,
@@ -29,7 +32,7 @@ import {
 
 import { colors } from "@/constants/theme";
 import { Customer } from "@/types/customer";
-import { Order, OrderItem, OrderStatus } from "@/types/order";
+import { Order, OrderItem } from "@/types/order";
 
 export default function OrderDetailsScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,8 +43,9 @@ export default function OrderDetailsScreen() {
 
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(false);
-    const [updatingStatus, setUpdatingStatus] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const confirm = useConfirm();
 
     const loadOrder = useCallback(async () => {
         try {
@@ -85,71 +89,41 @@ export default function OrderDetailsScreen() {
         }, [loadOrder])
     );
 
-    async function handleStatusChange(status: OrderStatus) {
-        if (!order || status === order.status) {
-            return;
-        }
-
-        try {
-            setUpdatingStatus(true);
-
-            await changeOrderStatus(order.id, status);
-
-            // Reflect the change locally instead of a full reload - the
-            // rest of the screen's data (items, customer) hasn't changed.
-            setOrder({ ...order, status });
-        } catch (error) {
-            Alert.alert(
-                "Failed to update status",
-                error instanceof Error
-                    ? error.message
-                    : "Something went wrong."
-            );
-        } finally {
-            setUpdatingStatus(false);
-        }
-    }
-
     async function handleDelete() {
         if (!order) {
             return;
         }
 
-        Alert.alert(
-            "Delete Order",
-            `Are you sure you want to delete Receipt #${order.receiptNumber}?`,
-            [
-                {
-                    text: "Cancel",
-                    style: "cancel",
-                },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            setDeleting(true);
-                            setError(null);
+        const confirmed = await confirm({
+            title: "Delete Order",
+            message: `Are you sure you want to delete Receipt #${order.receiptNumber}?`,
+            confirmText: "Delete",
+            tone: "danger",
+        });
 
-                            await removeOrder(order.id);
+        if (!confirmed) {
+            return;
+        }
 
-                            router.back();
-                        } catch (error) {
-                            const message =
-                                error instanceof Error
-                                    ? error.message
-                                    : "Failed to delete order.";
+        try {
+            setDeleting(true);
+            setError(null);
 
-                            setError(message);
+            await removeOrder(order.id);
 
-                            Alert.alert("Cannot Delete Order", message);
-                        } finally {
-                            setDeleting(false);
-                        }
-                    },
-                },
-            ]
-        );
+            router.back();
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Failed to delete order.";
+
+            setError(message);
+
+            Alert.alert("Cannot Delete Order", message);
+        } finally {
+            setDeleting(false);
+        }
     }
 
     if (loading) {
@@ -187,34 +161,62 @@ export default function OrderDetailsScreen() {
         <Screen>
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.header}>
-                    <AppText variant="title">
-                        Receipt #{order.receiptNumber}
-                    </AppText>
+                    <View style={styles.headerText}>
+                        <AppText variant="title">
+                            Receipt #{order.receiptNumber}
+                        </AppText>
 
-                    <AppText
-                        variant="secondary"
-                        onPress={() =>
-                            customer &&
-                            router.push({
-                                pathname: "/customer-details",
-                                params: { id: customer.id.toString() },
-                            })
-                        }
-                    >
-                        {customer?.name ?? "Unknown customer"}
-                        {customer?.phone ? ` · ${customer.phone}` : ""}
-                    </AppText>
+                        <AppText
+                            variant="secondary"
+                            onPress={() =>
+                                customer &&
+                                router.push({
+                                    pathname: "/customer-details",
+                                    params: { id: customer.id.toString() },
+                                })
+                            }
+                        >
+                            {customer?.name ?? "Unknown customer"}
+                            {customer?.phone ? ` · ${customer.phone}` : ""}
+                        </AppText>
+                    </View>
+
+                    {/* Edit/Delete sit beside the title as small icon
+                    buttons - a real detail-page header pattern - instead
+                    of full-width text buttons stacked at the bottom
+                    below "View Receipt". */}
+                    <View style={styles.headerActions}>
+                        <IconActionButton
+                            icon="pencil"
+                            label="Edit order"
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/edit-order",
+                                    params: { id: order.id.toString() },
+                                })
+                            }
+                            disabled={deleting}
+                        />
+
+                        <IconActionButton
+                            icon="trash-outline"
+                            label="Delete order"
+                            tone="danger"
+                            loading={deleting}
+                            onPress={handleDelete}
+                        />
+                    </View>
                 </View>
 
                 <AppCard>
+                    {/* Read-only here on purpose - this is a detail page,
+                    not an edit page. Changing status only from Edit Order
+                    avoids the confusing "tapped a chip, order silently
+                    changed" bug this used to have. */}
                     <View style={styles.section}>
                         <AppText variant="caption">Status</AppText>
 
-                        <OrderStatusPicker
-                            value={order.status}
-                            onChange={handleStatusChange}
-                            disabled={updatingStatus}
-                        />
+                        <OrderStatusBadge status={order.status} />
                     </View>
 
                     <View style={styles.row}>
@@ -356,40 +358,22 @@ export default function OrderDetailsScreen() {
                     <AppText variant="caption">{error}</AppText>
                 ) : null}
 
-                <View style={styles.actionsGroup}>
-                    <AppButton
-                        title="View Receipt"
-                        onPress={() =>
-                            router.push({
-                                pathname: "/receipt",
-                                params: { id: order.id.toString() },
-                            })
-                        }
-                    />
-
-                    <View style={styles.actions}>
-                        <AppButton
-                            title="Edit Order"
-                            variant="outline"
-                            style={styles.secondaryButton}
-                            onPress={() =>
-                                router.push({
-                                    pathname: "/edit-order",
-                                    params: { id: order.id.toString() },
-                                })
-                            }
-                            disabled={deleting}
+                <AppButton
+                    title="View Receipt"
+                    icon={
+                        <Ionicons
+                            name="receipt-outline"
+                            size={18}
+                            color={colors.white}
                         />
-
-                        <AppButton
-                            title={deleting ? "Deleting..." : "Delete Order"}
-                            onPress={handleDelete}
-                            disabled={deleting}
-                            variant="danger"
-                            style={styles.secondaryButton}
-                        />
-                    </View>
-                </View>
+                    }
+                    onPress={() =>
+                        router.push({
+                            pathname: "/receipt",
+                            params: { id: order.id.toString() },
+                        })
+                    }
+                />
             </ScrollView>
         </Screen>
     );
@@ -402,7 +386,20 @@ const styles = StyleSheet.create({
     },
 
     header: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 12,
+    },
+
+    headerText: {
+        flex: 1,
         gap: 4,
+    },
+
+    headerActions: {
+        flexDirection: "row",
+        gap: 8,
     },
 
     row: {
@@ -429,19 +426,6 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-    },
-
-    actionsGroup: {
-        gap: 12,
-    },
-
-    actions: {
-        flexDirection: "row",
-        gap: 12,
-    },
-
-    secondaryButton: {
-        flex: 1,
     },
 
     center: {

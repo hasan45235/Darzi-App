@@ -390,6 +390,12 @@ export default function EditOrderScreen() {
                                         );
                                     }
                                 }}
+                                // onValueChange only fires when a date is
+                                // actually picked, not on cancel - without
+                                // this, cancelling left showDatePicker
+                                // stuck true and the picker kept
+                                // reappearing on unrelated taps.
+                                onDismiss={() => setShowDatePicker(false)}
                             />
                         ) : null}
                     </View>

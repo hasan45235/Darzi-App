@@ -6,7 +6,6 @@ import {
 
 import {
     ActivityIndicator,
-    Alert,
     FlatList,
     RefreshControl,
     StyleSheet,
@@ -32,6 +31,7 @@ import { getCustomers } from "@/services/customerService";
 import { getOrders } from "@/services/orderService";
 
 import { colors } from "@/constants/theme";
+import { ORDER_STATUS_COLORS } from "@/constants/orderStatus";
 import { Customer } from "@/types/customer";
 import { Order } from "@/types/order";
 
@@ -152,20 +152,11 @@ export default function OrdersScreen() {
         });
     }, [orders, search, customerById]);
 
-    // Orders always belong to a customer, so "new order" starts by
-    // picking one - same flow as the "New Order" quick action on Home.
+    // Customer selection now happens inline on the Create Order screen
+    // itself (search-and-select), so "new order" just goes straight there
+    // instead of routing through the Customers tab first.
     function handleNewOrder() {
-        Alert.alert(
-            "Select a Customer",
-            "Choose the customer this order is for, then tap " +
-            "\"Create Order\" from their orders.",
-            [
-                {
-                    text: "OK",
-                    onPress: () => router.push("/customers"),
-                },
-            ]
-        );
+        router.push("/create-order");
     }
 
     return (
@@ -256,6 +247,15 @@ export default function OrdersScreen() {
                                     },
                                 })
                             }
+                            // A colored left edge (matching the status
+                            // badge's own color) so the list is scannable
+                            // by status at a glance, without needing to
+                            // read every badge individually.
+                            style={{
+                                borderLeftWidth: 3,
+                                borderLeftColor:
+                                    ORDER_STATUS_COLORS[item.status].text,
+                            }}
                         >
                             <View style={styles.orderHeader}>
                                 <AppText variant="secondary">

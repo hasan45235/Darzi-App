@@ -10,13 +10,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/AppButton";
-import AppCard from "@/components/AppCard";
 import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
 import BottomNav from "@/components/BottomNav";
-import CustomerAvatar from "@/components/CustomerAvatar";
 import FloatingActionButton from "@/components/FloatingActionButton";
+import ListRow from "@/components/ListRow";
 import Screen from "@/components/Screen";
+import ViewableCustomerAvatar from "@/components/ViewableCustomerAvatar";
 
 import { getActiveCustomers } from "@/services/customerService";
 import { resolveCustomerImageUri } from "@/services/customerImageService";
@@ -188,6 +188,9 @@ export default function CustomersScreen() {
                     data={filteredCustomers}
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={styles.list}
+                    ItemSeparatorComponent={() => (
+                        <View style={styles.separator} />
+                    )}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
@@ -204,7 +207,7 @@ export default function CustomersScreen() {
                         const stats = statsByCustomerId.get(item.id);
 
                         return (
-                            <AppCard
+                            <ListRow
                                 onPress={() =>
                                     router.push({
                                         pathname: "/customer-details",
@@ -213,30 +216,21 @@ export default function CustomersScreen() {
                                         },
                                     })
                                 }
-                                style={styles.row}
-                            >
-                                <CustomerAvatar
-                                    name={item.name}
-                                    photoUri={photoUri}
-                                    size={48}
-                                />
-
-                                <View style={styles.rowText}>
-                                    <AppText variant="secondary">
-                                        #{item.customerNumber} · {item.name}
-                                    </AppText>
-
-                                    <AppText variant="body">
-                                        {item.phone}
-                                    </AppText>
-
-                                    <AppText variant="caption">
-                                        {stats
-                                            ? `${stats.orderCount} order${stats.orderCount === 1 ? "" : "s"} · Last: ${stats.lastOrderDate}`
-                                            : "No orders yet"}
-                                    </AppText>
-                                </View>
-                            </AppCard>
+                                leading={
+                                    <ViewableCustomerAvatar
+                                        name={item.name}
+                                        photoUri={photoUri}
+                                        size={48}
+                                    />
+                                }
+                                title={item.name}
+                                subtitle={item.phone}
+                                caption={
+                                    stats
+                                        ? `#${item.customerNumber} · ${stats.orderCount} order${stats.orderCount === 1 ? "" : "s"} · Last: ${stats.lastOrderDate}`
+                                        : `#${item.customerNumber} · No orders yet`
+                                }
+                            />
                         );
                     }}
                 />
@@ -265,21 +259,14 @@ const styles = StyleSheet.create({
     },
 
     list: {
-        gap: 12,
-        // Extra room so the last card can scroll clear of the FAB
+        // Extra room so the last row can scroll clear of the FAB
         // instead of sitting underneath it.
         paddingBottom: 96,
     },
 
-    row: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-
-    rowText: {
-        flex: 1,
-        gap: 2,
+    separator: {
+        height: 1,
+        backgroundColor: colors.border,
     },
 
     center: {

@@ -3,7 +3,7 @@ import {
     useFocusEffect,
     useLocalSearchParams,
 } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -15,8 +15,13 @@ import {
 import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppText from "@/components/AppText";
-import CustomerAvatar from "@/components/CustomerAvatar";
+import FloatingActionButton from "@/components/FloatingActionButton";
+import IconActionButton from "@/components/IconActionButton";
+import OrderStatusBadge from "@/components/OrderStatusBadge";
 import Screen from "@/components/Screen";
+import ViewableCustomerAvatar from "@/components/ViewableCustomerAvatar";
+
+import { useConfirm } from "@/providers/ConfirmDialogProvider";
 
 import {
     findCustomerById,
@@ -24,9 +29,15 @@ import {
 } from "@/services/customerService";
 
 import { resolveCustomerImageUri } from "@/services/customerImageService";
+import { getCustomerOrders } from "@/services/orderService";
 
 import { colors, shadows } from "@/constants/theme";
+import { ORDER_STATUS_COLORS } from "@/constants/orderStatus";
 import { Customer } from "@/types/customer";
+import { Order } from "@/types/order";
+
+const RECENT_ORDERS_LIMIT = 5;
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default function CustomerDetailsScreen() {
     const { id } =
@@ -34,6 +45,9 @@ export default function CustomerDetailsScreen() {
 
     const [customer, setCustomer] =
         useState<Customer | null>(null);
+
+    const [orders, setOrders] =
+        useState<Order[]>([]);
 
     const [loading, setLoading] =
         useState(true);
@@ -43,6 +57,8 @@ export default function CustomerDetailsScreen() {
 
     const [error, setError] =
         useState<string | null>(null);
+
+    const confirm = useConfirm();
 
     const loadCustomer = useCallback(async () => {
         try {
@@ -55,14 +71,17 @@ export default function CustomerDetailsScreen() {
                 throw new Error("Invalid customer ID.");
             }
 
-            const result =
-                await findCustomerById(customerId);
+            const [result, customerOrders] = await Promise.all([
+                findCustomerById(customerId),
+                getCustomerOrders(customerId),
+            ]);
 
             if (!result) {
                 throw new Error("Customer not found.");
             }
 
             setCustomer(result);
+            setOrders(customerOrders);
         } catch (error) {
             setError(
                 error instanceof Error
@@ -80,51 +99,62 @@ export default function CustomerDetailsScreen() {
         }, [loadCustomer])
     );
 
+    // Orders created in the last 30 days, newest first - a quick "what's
+    // been happening lately" preview. Customer Orders (the FAB below)
+    // still shows every order this customer has ever had, unfiltered.
+    const recentOrders = useMemo(() => {
+        const cutoff = Date.now() - MONTH_MS;
+
+        return [...orders]
+            .filter(
+                (order) => new Date(order.createdAt).getTime() >= cutoff
+            )
+            .sort(
+                (a, b) =>
+                    new Date(b.createdAt).getTime() -
+                    new Date(a.createdAt).getTime()
+            )
+            .slice(0, RECENT_ORDERS_LIMIT);
+    }, [orders]);
+
     async function handleDelete() {
         if (!customer) {
             return;
         }
 
-        Alert.alert(
-            "Delete Customer",
-            `This will deactivate ${customer.name}. They'll be hidden ` +
-            "from your customer list, but their orders stay on record. " +
-            "You can permanently delete them later from Settings.",
-            [
-                {
-                    text: "Cancel",
-                    style: "cancel",
-                },
-                {
-                    text: "Deactivate",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            setDeleting(true);
-                            setError(null);
+        const confirmed = await confirm({
+            title: "Delete Customer",
+            message:
+                `This will deactivate ${customer.name}. They'll be hidden ` +
+                "from your customer list, but their orders stay on record. " +
+                "You can permanently delete them later from Settings.",
+            confirmText: "Deactivate",
+            tone: "danger",
+        });
 
-                            await removeCustomer(customer.id);
+        if (!confirmed) {
+            return;
+        }
 
-                            router.back();
-                        } catch (error) {
-                            const message =
-                                error instanceof Error
-                                    ? error.message
-                                    : "Failed to delete customer.";
+        try {
+            setDeleting(true);
+            setError(null);
 
-                            setError(message);
+            await removeCustomer(customer.id);
 
-                            Alert.alert(
-                                "Cannot Delete Customer",
-                                message
-                            );
-                        } finally {
-                            setDeleting(false);
-                        }
-                    },
-                },
-            ]
-        );
+            router.back();
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Failed to delete customer.";
+
+            setError(message);
+
+            Alert.alert("Cannot Delete Customer", message);
+        } finally {
+            setDeleting(false);
+        }
     }
 
     if (loading) {
@@ -164,7 +194,7 @@ export default function CustomerDetailsScreen() {
                 contentContainerStyle={styles.content}
             >
                 <View style={styles.profile}>
-                    <CustomerAvatar
+                    <ViewableCustomerAvatar
                         name={customer.name}
                         photoUri={resolveCustomerImageUri(customer.photoUri)}
                         size={140}
@@ -189,6 +219,34 @@ export default function CustomerDetailsScreen() {
                             </AppText>
                         </View>
                     ) : null}
+
+                    {/* Edit/Delete live right under the identity they act
+                    on - the same "contact card" placement real people/
+                    profile screens use - as small icon buttons instead
+                    of full-width text buttons competing with "View
+                    Orders" for attention lower down. */}
+                    <View style={styles.profileActions}>
+                        <IconActionButton
+                            icon="pencil"
+                            label="Edit customer"
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/edit-customer",
+                                    params: {
+                                        id: customer.id.toString(),
+                                    },
+                                })
+                            }
+                        />
+
+                        <IconActionButton
+                            icon="trash-outline"
+                            label="Delete customer"
+                            tone="danger"
+                            loading={deleting}
+                            onPress={handleDelete}
+                        />
+                    </View>
                 </View>
 
                 <AppCard>
@@ -227,67 +285,91 @@ export default function CustomerDetailsScreen() {
                     ) : null}
                 </AppCard>
 
+                {recentOrders.length > 0 ? (
+                    <View style={styles.section}>
+                        <AppText variant="heading">
+                            Recent Orders
+                        </AppText>
 
+                        <AppText variant="caption">
+                            Created in the last 30 days.
+                        </AppText>
+
+                        <View style={styles.recentOrdersList}>
+                            {recentOrders.map((order) => (
+                                <AppCard
+                                    key={order.id}
+                                    onPress={() =>
+                                        router.push({
+                                            pathname: "/order-details",
+                                            params: {
+                                                id: order.id.toString(),
+                                            },
+                                        })
+                                    }
+                                    style={{
+                                        borderLeftWidth: 3,
+                                        borderLeftColor:
+                                            ORDER_STATUS_COLORS[order.status]
+                                                .text,
+                                    }}
+                                >
+                                    <View style={styles.recentOrderHeader}>
+                                        <AppText variant="secondary">
+                                            Receipt #{order.receiptNumber}
+                                        </AppText>
+
+                                        <AppText variant="caption">
+                                            {order.orderDate}
+                                        </AppText>
+                                    </View>
+
+                                    <OrderStatusBadge
+                                        status={order.status}
+                                        style={styles.recentOrderBadge}
+                                    />
+
+                                    <AppText variant="body">
+                                        Total: {order.total}
+                                    </AppText>
+                                </AppCard>
+                            ))}
+                        </View>
+                    </View>
+                ) : null}
 
                 {error ? (
                     <AppText variant="caption">
                         {error}
                     </AppText>
                 ) : null}
-
-
-                <View style={styles.actions}>
-                    <AppButton
-                        title="View Orders"
-                        onPress={() =>
-                            router.push({
-                                pathname: "/customer-orders",
-                                params: {
-                                    id: customer.id.toString(),
-                                },
-                            })
-                        }
-                    />
-
-                    {/* Edit/Delete are secondary to "View Orders" and used
-                    far less often, so they're a compact side-by-side row
-                    instead of two more full-size stacked buttons - and
-                    Delete is properly styled as a destructive action
-                    rather than the same gold as everything else. */}
-                    <View style={styles.secondaryActions}>
-                        <AppButton
-                            title="Edit"
-                            variant="outline"
-                            style={styles.secondaryButton}
-                            onPress={() =>
-                                router.push({
-                                    pathname: "/edit-customer",
-                                    params: {
-                                        id: customer.id.toString(),
-                                    },
-                                })
-                            }
-                        />
-
-                        <AppButton
-                            title={
-                                deleting ? "Deactivating..." : "Delete"
-                            }
-                            variant="danger"
-                            style={styles.secondaryButton}
-                            onPress={handleDelete}
-                            disabled={deleting}
-                        />
-                    </View>
-                </View>
             </ScrollView>
+
+            {/* "View Orders" is this screen's one primary action, so it
+            gets the floating button treatment (same as Orders/Customers'
+            "add new") instead of a long full-width button competing with
+            everything above it for space. */}
+            <FloatingActionButton
+                icon="receipt-outline"
+                label="View orders"
+                onPress={() =>
+                    router.push({
+                        pathname: "/customer-orders",
+                        params: {
+                            id: customer.id.toString(),
+                        },
+                    })
+                }
+            />
         </Screen>
     );
 }
 
 const styles = StyleSheet.create({
     content: {
-        paddingBottom: 32,
+        // Extra room so the last card can scroll clear of the FAB
+        // instead of sitting underneath it.
+        paddingBottom: 96,
         gap: 16,
     },
 
@@ -309,23 +391,31 @@ const styles = StyleSheet.create({
         ...shadows.medium,
     },
 
+    profileActions: {
+        flexDirection: "row",
+        gap: 16,
+        marginTop: 8,
+    },
+
     section: {
         gap: 4,
         marginBottom: 16,
     },
 
-    actions: {
+    recentOrdersList: {
         gap: 12,
+        marginTop: 8,
     },
 
-    secondaryActions: {
+    recentOrderHeader: {
         flexDirection: "row",
-        gap: 12,
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 8,
     },
 
-    secondaryButton: {
-        flex: 1,
-        minHeight: 44,
+    recentOrderBadge: {
+        marginBottom: 8,
     },
 
     center: {

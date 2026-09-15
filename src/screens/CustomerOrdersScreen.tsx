@@ -3,6 +3,7 @@ import {
     useState,
 } from "react";
 
+import { Ionicons } from "@expo/vector-icons";
 import {
     ActivityIndicator,
     FlatList,
@@ -30,6 +31,8 @@ import {
     getCustomerOrders,
 } from "@/services/orderService";
 
+import { colors } from "@/constants/theme";
+import { ORDER_STATUS_COLORS } from "@/constants/orderStatus";
 import { Customer } from "@/types/customer";
 import { Order } from "@/types/order";
 
@@ -111,6 +114,14 @@ export default function CustomerOrdersScreen() {
 
                 <AppButton
                     title="Create Order"
+                    variant="outline"
+                    icon={
+                        <Ionicons
+                            name="add"
+                            size={18}
+                            color={colors.primary}
+                        />
+                    }
                     onPress={() =>
                         router.push({
                             pathname: "/create-order",
@@ -150,6 +161,11 @@ export default function CustomerOrdersScreen() {
                                     },
                                 })
                             }
+                            style={{
+                                borderLeftWidth: 3,
+                                borderLeftColor:
+                                    ORDER_STATUS_COLORS[item.status].text,
+                            }}
                         >
                             <View style={styles.orderHeader}>
                                 <AppText variant="secondary">

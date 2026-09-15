@@ -1,9 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
+    Pressable,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     View,
 } from "react-native";
@@ -14,9 +16,13 @@ import AppCard from "@/components/AppCard";
 import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
 import BottomNav from "@/components/BottomNav";
+import FloatingActionButton from "@/components/FloatingActionButton";
+import ListRow from "@/components/ListRow";
 import Screen from "@/components/Screen";
+import ViewableCustomerAvatar from "@/components/ViewableCustomerAvatar";
 
 import { getCustomers } from "@/services/customerService";
+import { resolveCustomerImageUri } from "@/services/customerImageService";
 import { getOrders } from "@/services/orderService";
 import { getBusinessName } from "@/services/settingsService";
 
@@ -24,8 +30,20 @@ import { colors, spacing } from "@/constants/theme";
 import { Customer } from "@/types/customer";
 import { Order } from "@/types/order";
 
-const RECENT_ORDERS_LIMIT = 5;
-const RECENT_CUSTOMERS_LIMIT = 5;
+const UPCOMING_ORDERS_LIMIT = 5;
+const RECENT_CUSTOMERS_LIMIT = 8;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Local "YYYY-MM-DD" (matches how deliveryDate is stored) - built from
+// the date's own fields rather than toISOString(), which is UTC and
+// can land on the wrong day near a local midnight boundary.
+function toDateString(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
 
 type SearchResult =
     | { type: "customer"; customer: Customer }
@@ -128,16 +146,41 @@ export default function HomeScreen() {
         return map;
     }, [customers]);
 
-    // Newest first. `id` auto-increments with creation order, which is a
-    // safer "recency" signal here than trusting query order.
-    const recentOrders = useMemo(() => {
-        return [...orders]
-            .sort((a, b) => b.id - a.id)
-            .slice(0, RECENT_ORDERS_LIMIT);
+    // What actually needs attention soon: not-yet-finished orders due
+    // within the next 7 days, soonest delivery first - a plain "most
+    // recently created" list didn't tell the tailor anything about what
+    // was actually coming due.
+    const upcomingOrders = useMemo(() => {
+        const now = new Date();
+        const todayStr = toDateString(now);
+
+        const weekFromNow = new Date(now);
+        weekFromNow.setDate(weekFromNow.getDate() + 7);
+        const weekFromNowStr = toDateString(weekFromNow);
+
+        return orders
+            .filter(
+                (order) =>
+                    order.status !== "completed" &&
+                    order.status !== "cancelled" &&
+                    order.deliveryDate >= todayStr &&
+                    order.deliveryDate <= weekFromNowStr
+            )
+            .sort((a, b) =>
+                a.deliveryDate.localeCompare(b.deliveryDate)
+            )
+            .slice(0, UPCOMING_ORDERS_LIMIT);
     }, [orders]);
 
+    // Customers added in the last 7 days, newest first.
     const recentCustomers = useMemo(() => {
+        const cutoff = Date.now() - WEEK_MS;
+
         return [...customers]
+            .filter(
+                (customer) =>
+                    new Date(customer.createdAt).getTime() >= cutoff
+            )
             .sort((a, b) => b.id - a.id)
             .slice(0, RECENT_CUSTOMERS_LIMIT);
     }, [customers]);
@@ -175,17 +218,11 @@ export default function HomeScreen() {
         return [...customerMatches, ...orderMatches];
     }, [search, customers, orders, customerNameById]);
 
+    // Customer selection now happens inline on the Create Order screen
+    // itself (search-and-select), so "new order" just goes straight there
+    // instead of routing through the Customers tab first.
     function handleNewOrder() {
-        Alert.alert(
-            "Select a Customer",
-            "Choose the customer this order is for, then tap \"Create Order\" from their orders.",
-            [
-                {
-                    text: "OK",
-                    onPress: () => router.push("/customers"),
-                },
-            ]
-        );
+        router.push("/create-order");
     }
 
     const isSearching = search.trim().length > 0;
@@ -215,6 +252,11 @@ export default function HomeScreen() {
 
     return (
         <View style={[styles.screenWrapper, { paddingTop: insets.top }]}>
+            {/* Screen scrolls its own content, so the FAB lives in this
+            in-between wrapper instead of inside it - a floating button
+            has to stay pinned to the viewport, not drift away with
+            whatever the tailor scrolls past. */}
+            <View style={styles.scrollArea}>
             <Screen
                 scroll
                 refreshControl={
@@ -261,66 +303,102 @@ export default function HomeScreen() {
                             </AppText>
                         </View>
                     ) : (
-                        <View style={styles.list}>
-                            {searchResults.map((result) =>
-                                result.type === "customer" ? (
-                                    <AppCard
-                                        key={`customer-${result.customer.id}`}
-                                        onPress={() =>
-                                            router.push({
-                                                pathname:
-                                                    "/customer-details",
-                                                params: {
-                                                    id: result.customer.id.toString(),
-                                                },
-                                            })
-                                        }
-                                    >
-                                        <AppText variant="secondary">
-                                            {result.customer.name}
-                                        </AppText>
+                        // Detailed rows (avatar, name, phone, customer #)
+                        // instead of two bare lines of text - a search
+                        // result should carry enough to tell customers
+                        // apart at a glance, not just a name.
+                        <View style={styles.searchResults}>
+                            {searchResults.map((result, index) => (
+                                <View
+                                    key={
+                                        result.type === "customer"
+                                            ? `customer-${result.customer.id}`
+                                            : `order-${result.order.id}`
+                                    }
+                                >
+                                    {result.type === "customer" ? (
+                                        <ListRow
+                                            onPress={() =>
+                                                router.push({
+                                                    pathname:
+                                                        "/customer-details",
+                                                    params: {
+                                                        id: result.customer.id.toString(),
+                                                    },
+                                                })
+                                            }
+                                            leading={
+                                                <ViewableCustomerAvatar
+                                                    name={
+                                                        result.customer.name
+                                                    }
+                                                    photoUri={resolveCustomerImageUri(
+                                                        result.customer
+                                                            .photoUri
+                                                    )}
+                                                    size={48}
+                                                />
+                                            }
+                                            title={result.customer.name}
+                                            subtitle={result.customer.phone}
+                                            caption={`#${result.customer.customerNumber}`}
+                                        />
+                                    ) : (
+                                        <ListRow
+                                            onPress={() =>
+                                                router.push({
+                                                    pathname:
+                                                        "/order-details",
+                                                    params: {
+                                                        id: result.order.id.toString(),
+                                                    },
+                                                })
+                                            }
+                                            leading={
+                                                <View
+                                                    style={
+                                                        styles.orderResultIcon
+                                                    }
+                                                >
+                                                    <Ionicons
+                                                        name="receipt"
+                                                        size={22}
+                                                        color={
+                                                            colors.primary
+                                                        }
+                                                    />
+                                                </View>
+                                            }
+                                            title={`Receipt #${result.order.receiptNumber}`}
+                                            subtitle={result.customerName}
+                                        />
+                                    )}
 
-                                        <AppText variant="body">
-                                            {result.customer.phone}
-                                        </AppText>
-                                    </AppCard>
-                                ) : (
-                                    <AppCard
-                                        key={`order-${result.order.id}`}
-                                        onPress={() =>
-                                            router.push({
-                                                pathname: "/order-details",
-                                                params: {
-                                                    id: result.order.id.toString(),
-                                                },
-                                            })
-                                        }
-                                    >
-                                        <AppText variant="secondary">
-                                            Receipt #{result.order.receiptNumber}
-                                        </AppText>
-
-                                        <AppText variant="body">
-                                            {result.customerName}
-                                        </AppText>
-                                    </AppCard>
-                                )
-                            )}
+                                    {index < searchResults.length - 1 ? (
+                                        <View style={styles.separator} />
+                                    ) : null}
+                                </View>
+                            ))}
                         </View>
                     )
                 ) : (
                     <>
+                        {/* "New Order" moved to the floating action
+                        button below, matching Orders/Customers - with
+                        only two buttons left, this row finally has room
+                        for its icon and label to breathe. */}
                         <View style={styles.quickActions}>
-                            <AppButton
-                                title="New Order"
-                                onPress={handleNewOrder}
-                                style={styles.quickActionButton}
-                            />
-
                             <AppButton
                                 title="Customers"
                                 variant="secondary"
                                 onPress={() => router.push("/customers")}
+                                icon={
+                                    <Ionicons
+                                        name="people"
+                                        size={18}
+                                        color={colors.white}
+                                    />
+                                }
                                 style={styles.quickActionButton}
                             />
 
@@ -328,22 +406,33 @@ export default function HomeScreen() {
                                 title="Orders"
                                 variant="outline"
                                 onPress={() => router.push("/orders")}
+                                icon={
+                                    <Ionicons
+                                        name="receipt"
+                                        size={18}
+                                        color={colors.primary}
+                                    />
+                                }
                                 style={styles.quickActionButton}
                             />
                         </View>
 
                         <View style={styles.section}>
                             <AppText variant="heading">
-                                Recent Orders
+                                Upcoming Orders
                             </AppText>
 
-                            {recentOrders.length === 0 ? (
+                            <AppText variant="caption">
+                                Deliveries due in the next 7 days.
+                            </AppText>
+
+                            {upcomingOrders.length === 0 ? (
                                 <AppText variant="caption">
-                                    No orders yet.
+                                    Nothing due this week.
                                 </AppText>
                             ) : (
                                 <View style={styles.list}>
-                                    {recentOrders.map((order) => (
+                                    {upcomingOrders.map((order) => (
                                         <AppCard
                                             key={order.id}
                                             onPress={() =>
@@ -384,15 +473,35 @@ export default function HomeScreen() {
                                 Recently Added Customers
                             </AppText>
 
+                            <AppText variant="caption">
+                                Added in the last 7 days.
+                            </AppText>
+
                             {recentCustomers.length === 0 ? (
                                 <AppText variant="caption">
-                                    No customers yet.
+                                    No new customers this week.
                                 </AppText>
                             ) : (
-                                <View style={styles.list}>
+                                // A horizontal row of avatar-and-name
+                                // chips - the same "recent contacts"
+                                // pattern most phone/messaging apps use -
+                                // instead of stacked cards that just
+                                // repeated the same two lines of text.
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={
+                                        styles.customerChipRow
+                                    }
+                                >
                                     {recentCustomers.map((customer) => (
-                                        <AppCard
+                                        <Pressable
                                             key={customer.id}
+                                            style={({ pressed }) => [
+                                                styles.customerChip,
+                                                pressed &&
+                                                styles.customerChipPressed,
+                                            ]}
                                             onPress={() =>
                                                 router.push({
                                                     pathname:
@@ -403,21 +512,37 @@ export default function HomeScreen() {
                                                 })
                                             }
                                         >
-                                            <AppText variant="secondary">
-                                                {customer.name}
-                                            </AppText>
+                                            <ViewableCustomerAvatar
+                                                name={customer.name}
+                                                photoUri={resolveCustomerImageUri(
+                                                    customer.photoUri
+                                                )}
+                                                size={56}
+                                            />
 
-                                            <AppText variant="body">
-                                                {customer.phone}
+                                            <AppText
+                                                variant="caption"
+                                                numberOfLines={1}
+                                                style={
+                                                    styles.customerChipName
+                                                }
+                                            >
+                                                {customer.name.split(" ")[0]}
                                             </AppText>
-                                        </AppCard>
+                                        </Pressable>
                                     ))}
-                                </View>
+                                </ScrollView>
                             )}
                         </View>
                     </>
                 )}
             </Screen>
+
+            <FloatingActionButton
+                label="New order"
+                onPress={handleNewOrder}
+            />
+            </View>
 
             <BottomNav />
         </View>
@@ -428,6 +553,13 @@ const styles = StyleSheet.create({
     screenWrapper: {
         flex: 1,
         backgroundColor: colors.background,
+    },
+
+    // Fills the space above BottomNav so the FAB (absolutely positioned
+    // within this box) stays pinned to the bottom-right of the visible
+    // screen instead of scrolling away with Screen's own content.
+    scrollArea: {
+        flex: 1,
     },
 
     header: {
@@ -450,7 +582,6 @@ const styles = StyleSheet.create({
 
     quickActionButton: {
         flex: 1,
-        paddingHorizontal: spacing.sm,
     },
 
     section: {
@@ -460,6 +591,43 @@ const styles = StyleSheet.create({
 
     list: {
         gap: spacing.md,
+    },
+
+    searchResults: {
+        marginTop: spacing.sm,
+    },
+
+    separator: {
+        height: 1,
+        backgroundColor: colors.border,
+    },
+
+    orderResultIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.secondaryLight,
+    },
+
+    customerChipRow: {
+        gap: spacing.lg,
+        paddingRight: spacing.lg,
+    },
+
+    customerChip: {
+        alignItems: "center",
+        width: 72,
+        gap: spacing.xs,
+    },
+
+    customerChipPressed: {
+        opacity: 0.7,
+    },
+
+    customerChipName: {
+        textAlign: "center",
     },
 
     center: {

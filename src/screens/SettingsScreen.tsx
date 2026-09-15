@@ -1,6 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
+    Pressable,
     StyleSheet,
     View,
 } from "react-native";
@@ -13,7 +16,9 @@ import AppText from "@/components/AppText";
 import BottomNav from "@/components/BottomNav";
 import Screen from "@/components/Screen";
 
-import { colors } from "@/constants/theme";
+import { useConfirm } from "@/providers/ConfirmDialogProvider";
+
+import { colors, spacing } from "@/constants/theme";
 
 import {
     getBasicPantPrice,
@@ -84,6 +89,7 @@ export default function SettingsScreen() {
     const [saving, setSaving] = useState(false);
 
     const insets = useSafeAreaInsets();
+    const confirm = useConfirm();
 
     useEffect(() => {
         loadSettings();
@@ -107,46 +113,38 @@ export default function SettingsScreen() {
         }
     }
 
-    function handlePermanentDelete(customer: Customer) {
-        Alert.alert(
-            "Permanently Delete Customer",
-            `This will permanently delete ${customer.name} and all of ` +
-            "their orders. This cannot be undone.",
-            [
-                {
-                    text: "Cancel",
-                    style: "cancel",
-                },
-                {
-                    text: "Delete Forever",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            setDeletingCustomerId(customer.id);
+    async function handlePermanentDelete(customer: Customer) {
+        const confirmed = await confirm({
+            title: "Permanently Delete Customer",
+            message:
+                `This will permanently delete ${customer.name} and all of ` +
+                "their orders. This cannot be undone.",
+            confirmText: "Delete Forever",
+            tone: "danger",
+        });
 
-                            await permanentlyDeleteCustomer(
-                                customer.id
-                            );
+        if (!confirmed) {
+            return;
+        }
 
-                            setInactiveCustomers((current) =>
-                                current.filter(
-                                    (item) => item.id !== customer.id
-                                )
-                            );
-                        } catch (error) {
-                            Alert.alert(
-                                "Failed to delete",
-                                error instanceof Error
-                                    ? error.message
-                                    : "Something went wrong."
-                            );
-                        } finally {
-                            setDeletingCustomerId(null);
-                        }
-                    },
-                },
-            ]
-        );
+        try {
+            setDeletingCustomerId(customer.id);
+
+            await permanentlyDeleteCustomer(customer.id);
+
+            setInactiveCustomers((current) =>
+                current.filter((item) => item.id !== customer.id)
+            );
+        } catch (error) {
+            Alert.alert(
+                "Failed to delete",
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong."
+            );
+        } finally {
+            setDeletingCustomerId(null);
+        }
     }
 
     async function loadSettings() {
@@ -547,20 +545,37 @@ export default function SettingsScreen() {
                                     </AppText>
                                 </View>
 
-                                <AppButton
-                                    title={
-                                        deletingCustomerId === customer.id
-                                            ? "Deleting..."
-                                            : "Delete Forever"
-                                    }
-                                    variant="danger"
+                                {/* A dense list of customers doesn't need a
+                                full-size danger button per row - a small
+                                icon-only affordance (the same pattern real
+                                contact/settings lists use for a destructive
+                                row action) keeps the row visually calm while
+                                still being unmistakably "delete". */}
+                                <Pressable
                                     onPress={() =>
                                         handlePermanentDelete(customer)
                                     }
                                     disabled={
                                         deletingCustomerId !== null
                                     }
-                                />
+                                    hitSlop={8}
+                                    style={styles.deleteIconButton}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Permanently delete ${customer.name}`}
+                                >
+                                    {deletingCustomerId === customer.id ? (
+                                        <ActivityIndicator
+                                            size="small"
+                                            color={colors.danger}
+                                        />
+                                    ) : (
+                                        <Ionicons
+                                            name="trash-outline"
+                                            size={20}
+                                            color={colors.danger}
+                                        />
+                                    )}
+                                </Pressable>
                             </View>
                         ))
                     )}
@@ -603,6 +618,10 @@ const styles = StyleSheet.create({
     inactiveRowText: {
         flex: 1,
         gap: 2,
+    },
+
+    deleteIconButton: {
+        padding: spacing.sm,
     },
 
     warningInput: {
