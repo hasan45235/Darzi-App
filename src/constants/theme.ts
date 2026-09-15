@@ -1,29 +1,35 @@
+// A "bespoke tailor" palette - deep navy and antique gold (the classic
+// fabric-and-thread pairing), on a warm ivory ground instead of a cold
+// corporate gray. Every other file imports these tokens rather than
+// hardcoding colors, so the whole app's look lives in one place.
 export const colors = {
-    primary: "#D97706",
-    primaryDark: "#B45309",
-    primaryLight: "#FEF3C7",
+    primary: "#B8860D",
+    primaryDark: "#8A6508",
+    primaryLight: "#F7ECD1",
 
-    secondary: "#17365D",
-    secondaryDark: "#102A43",
-    secondaryLight: "#E8EEF5",
+    secondary: "#13294B",
+    secondaryDark: "#0B1B33",
+    secondaryLight: "#E8ECF3",
 
-    background: "#F7F8FA",
+    background: "#FAF8F4",
     surface: "#FFFFFF",
 
-    text: "#17202A",
-    textSecondary: "#667085",
-    textMuted: "#98A2B3",
+    text: "#1A1D29",
+    textSecondary: "#5B6472",
+    textMuted: "#98A1AC",
 
-    border: "#E4E7EC",
+    border: "#EAE4D8",
 
-    success: "#15803D",
-    successLight: "#DCFCE7",
+    success: "#1F7A4D",
+    successLight: "#E1F3E8",
 
-    danger: "#B42318",
-    dangerLight: "#FEE4E2",
+    danger: "#B3261E",
+    dangerLight: "#FBE4E2",
 
-    warning: "#B54708",
-    warningLight: "#FEF0C7",
+    // Kept visibly distinct from the gold primary (more orange, less
+    // yellow) so an "In Progress" badge never reads as a brand accent.
+    warning: "#C2540C",
+    warningLight: "#FBE7D6",
 
     white: "#FFFFFF",
     black: "#000000",
@@ -86,5 +92,18 @@ export const shadows = {
         shadowOpacity: 0.08,
         shadowRadius: 6,
         elevation: 3,
+    },
+
+    // A stronger, warm-tinted lift for elements that should look like
+    // they're hovering above the page - currently just the FAB.
+    floating: {
+        shadowColor: colors.primaryDark,
+        shadowOffset: {
+            width: 0,
+            height: 6,
+        },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 8,
     },
 };

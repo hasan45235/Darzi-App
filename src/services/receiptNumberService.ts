@@ -8,15 +8,34 @@ import {
     SETTING_KEYS,
 } from "@/constants/settings";
 
-export async function initializeReceiptNumber(): Promise<void> {
-    const nextNumber = await getSetting(
-        SETTING_KEYS.nextReceiptNumber
-    );
+import { getDatabase } from "@/database/database.native";
 
-    if (nextNumber === null) {
+export async function initializeReceiptNumber(): Promise<void> {
+    const startingValue =
+        await getSetting(
+            SETTING_KEYS.startingReceiptNumber
+        );
+
+    if (startingValue === null) {
+        await setSetting(
+            SETTING_KEYS.startingReceiptNumber,
+            DEFAULT_SETTINGS[
+            SETTING_KEYS.startingReceiptNumber
+            ]
+        );
+    }
+
+    const nextValue =
+        await getSetting(
+            SETTING_KEYS.nextReceiptNumber
+        );
+
+    if (nextValue === null) {
         await setSetting(
             SETTING_KEYS.nextReceiptNumber,
-            DEFAULT_SETTINGS[SETTING_KEYS.nextReceiptNumber]
+            DEFAULT_SETTINGS[
+            SETTING_KEYS.nextReceiptNumber
+            ]
         );
     }
 }
@@ -24,19 +43,38 @@ export async function initializeReceiptNumber(): Promise<void> {
 export async function getNextReceiptNumber(): Promise<number> {
     await initializeReceiptNumber();
 
-    const value = await getSetting(
-        SETTING_KEYS.nextReceiptNumber
+    const startingValue = Number(
+        await getSetting(
+            SETTING_KEYS.startingReceiptNumber
+        )
     );
 
-    const number = Number(value);
+    const savedNextValue = Number(
+        await getSetting(
+            SETTING_KEYS.nextReceiptNumber
+        )
+    );
 
-    if (!Number.isInteger(number) || number < 1) {
-        throw new Error(
-            "Invalid next receipt number."
+    const db = await getDatabase();
+
+    const highestOrder =
+        await db.getFirstAsync<{
+            highest: number | null;
+        }>(
+            `
+            SELECT MAX(receipt_number) AS highest
+            FROM orders
+            `
         );
-    }
 
-    return number;
+    const highestExisting =
+        highestOrder?.highest ?? 0;
+
+    return Math.max(
+        startingValue || 1,
+        savedNextValue || 1,
+        highestExisting + 1
+    );
 }
 
 export async function advanceReceiptNumber(): Promise<void> {

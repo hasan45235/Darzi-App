@@ -14,6 +14,10 @@ type ScreenProps = {
     scroll?: boolean;
     style?: ViewStyle;
     contentContainerStyle?: ScrollViewProps["contentContainerStyle"];
+    // Only meaningful when `scroll` is true - lets scrollable screens
+    // (Home, Customers, Orders) opt into pull-to-refresh without each
+    // one reaching into ScrollView directly.
+    refreshControl?: ScrollViewProps["refreshControl"];
 };
 
 export default function Screen({
@@ -21,6 +25,7 @@ export default function Screen({
     scroll = false,
     style,
     contentContainerStyle,
+    refreshControl,
 }: ScreenProps) {
     if (scroll) {
         return (
@@ -32,6 +37,7 @@ export default function Screen({
                 ]}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
+                refreshControl={refreshControl}
             >
                 {children}
             </ScrollView>

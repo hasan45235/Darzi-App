@@ -7,7 +7,6 @@ import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Image,
     ScrollView,
     StyleSheet,
     View,
@@ -16,6 +15,7 @@ import {
 import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppText from "@/components/AppText";
+import CustomerAvatar from "@/components/CustomerAvatar";
 import Screen from "@/components/Screen";
 
 import {
@@ -23,7 +23,9 @@ import {
     removeCustomer,
 } from "@/services/customerService";
 
-import { colors } from "@/constants/theme";
+import { resolveCustomerImageUri } from "@/services/customerImageService";
+
+import { colors, shadows } from "@/constants/theme";
 import { Customer } from "@/types/customer";
 
 export default function CustomerDetailsScreen() {
@@ -85,14 +87,16 @@ export default function CustomerDetailsScreen() {
 
         Alert.alert(
             "Delete Customer",
-            `Are you sure you want to delete ${customer.name}?`,
+            `This will deactivate ${customer.name}. They'll be hidden ` +
+            "from your customer list, but their orders stay on record. " +
+            "You can permanently delete them later from Settings.",
             [
                 {
                     text: "Cancel",
                     style: "cancel",
                 },
                 {
-                    text: "Delete",
+                    text: "Deactivate",
                     style: "destructive",
                     onPress: async () => {
                         try {
@@ -103,10 +107,16 @@ export default function CustomerDetailsScreen() {
 
                             router.back();
                         } catch (error) {
-                            setError(
+                            const message =
                                 error instanceof Error
                                     ? error.message
-                                    : "Failed to delete customer."
+                                    : "Failed to delete customer.";
+
+                            setError(message);
+
+                            Alert.alert(
+                                "Cannot Delete Customer",
+                                message
                             );
                         } finally {
                             setDeleting(false);
@@ -154,26 +164,31 @@ export default function CustomerDetailsScreen() {
                 contentContainerStyle={styles.content}
             >
                 <View style={styles.profile}>
-                    {customer.photoUri ? (
-                        <Image
-                            source={{ uri: customer.photoUri }}
-                            style={styles.photo}
-                        />
-                    ) : (
-                        <View style={styles.placeholder}>
-                            <AppText variant="secondary">
-                                No Photo
-                            </AppText>
-                        </View>
-                    )}
+                    <CustomerAvatar
+                        name={customer.name}
+                        photoUri={resolveCustomerImageUri(customer.photoUri)}
+                        size={140}
+                        style={styles.avatar}
+                    />
 
                     <AppText variant="title">
                         {customer.name}
                     </AppText>
 
                     <AppText variant="caption">
-                        Customer #{customer.id}
+                        Customer #{customer.customerNumber}
                     </AppText>
+
+                    {!customer.isActive ? (
+                        <View style={styles.inactiveBadge}>
+                            <AppText
+                                variant="caption"
+                                style={{ color: colors.danger }}
+                            >
+                                Deactivated
+                            </AppText>
+                        </View>
+                    ) : null}
                 </View>
 
                 <AppCard>
@@ -221,23 +236,12 @@ export default function CustomerDetailsScreen() {
                 ) : null}
 
 
-                <AppButton
-                    title="View Orders"
-                    onPress={() =>
-                        router.push({
-                            pathname: "/customer-orders",
-                            params: {
-                                id: customer.id.toString(),
-                            },
-                        })
-                    }
-                />
                 <View style={styles.actions}>
                     <AppButton
-                        title="Edit Customer"
+                        title="View Orders"
                         onPress={() =>
                             router.push({
-                                pathname: "/edit-customer",
+                                pathname: "/customer-orders",
                                 params: {
                                     id: customer.id.toString(),
                                 },
@@ -245,15 +249,36 @@ export default function CustomerDetailsScreen() {
                         }
                     />
 
-                    <AppButton
-                        title={
-                            deleting
-                                ? "Deleting..."
-                                : "Delete Customer"
-                        }
-                        onPress={handleDelete}
-                        disabled={deleting}
-                    />
+                    {/* Edit/Delete are secondary to "View Orders" and used
+                    far less often, so they're a compact side-by-side row
+                    instead of two more full-size stacked buttons - and
+                    Delete is properly styled as a destructive action
+                    rather than the same gold as everything else. */}
+                    <View style={styles.secondaryActions}>
+                        <AppButton
+                            title="Edit"
+                            variant="outline"
+                            style={styles.secondaryButton}
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/edit-customer",
+                                    params: {
+                                        id: customer.id.toString(),
+                                    },
+                                })
+                            }
+                        />
+
+                        <AppButton
+                            title={
+                                deleting ? "Deactivating..." : "Delete"
+                            }
+                            variant="danger"
+                            style={styles.secondaryButton}
+                            onPress={handleDelete}
+                            disabled={deleting}
+                        />
+                    </View>
                 </View>
             </ScrollView>
         </Screen>
@@ -271,21 +296,17 @@ const styles = StyleSheet.create({
         gap: 6,
     },
 
-    photo: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        marginBottom: 8,
+    inactiveBadge: {
+        marginTop: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: colors.dangerLight,
     },
 
-    placeholder: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        backgroundColor: colors.secondaryLight,
-        justifyContent: "center",
-        alignItems: "center",
+    avatar: {
         marginBottom: 8,
+        ...shadows.medium,
     },
 
     section: {
@@ -295,6 +316,16 @@ const styles = StyleSheet.create({
 
     actions: {
         gap: 12,
+    },
+
+    secondaryActions: {
+        flexDirection: "row",
+        gap: 12,
+    },
+
+    secondaryButton: {
+        flex: 1,
+        minHeight: 44,
     },
 
     center: {

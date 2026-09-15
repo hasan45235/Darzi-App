@@ -3,8 +3,10 @@ export const SETTING_KEYS = {
     businessSubtitle: "business_subtitle",
     businessPhone: "business_phone",
     businessAddress: "business_address",
+    // Seed value only - used to suggest the next customer number in the
+    // Add Customer form. Customer numbers are entered manually, so there
+    // is no auto-incrementing counter to persist alongside it.
     customerNumberStarting: "customer_number_starting",
-    nextCustomerNumber: "next_customer_number",
 
     basicSuitPrice: "basic_suit_price",
     basicPantPrice: "basic_pant_price",
@@ -23,7 +25,6 @@ export const DEFAULT_SETTINGS = {
     [SETTING_KEYS.businessPhone]: "",
     [SETTING_KEYS.businessAddress]: "",
     [SETTING_KEYS.customerNumberStarting]: "2000",
-    [SETTING_KEYS.nextCustomerNumber]: "2000",
     [SETTING_KEYS.basicSuitPrice]: "0",
     [SETTING_KEYS.basicPantPrice]: "0",
     [SETTING_KEYS.basicShirtPrice]: "0",

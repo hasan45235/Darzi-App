@@ -9,13 +9,29 @@ import {
 } from "@/database/repositories/settingsRepository";
 
 export async function initializeDefaultSettings(): Promise<void> {
-    for (const [key, defaultValue] of Object.entries(DEFAULT_SETTINGS)) {
+    for (const [key, defaultValue] of Object.entries(
+        DEFAULT_SETTINGS
+    )) {
         const existingValue = await getSetting(key);
 
         if (existingValue === null) {
             await setSetting(key, defaultValue);
         }
     }
+}
+
+async function getNumberSetting(
+    key: string,
+    fallback: string
+): Promise<number> {
+    const value = await getSetting(key);
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        return Number(fallback);
+    }
+
+    return Math.floor(parsed);
 }
 
 export async function getBusinessName(): Promise<string> {
@@ -54,35 +70,57 @@ export async function getCurrency(): Promise<string> {
 }
 
 export async function getStartingReceiptNumber(): Promise<number> {
-    const value = await getSetting(
+    return getNumberSetting(
+        SETTING_KEYS.startingReceiptNumber,
+        DEFAULT_SETTINGS[
         SETTING_KEYS.startingReceiptNumber
+        ]
     );
-
-    const parsed = Number(value);
-
-    if (!Number.isFinite(parsed) || parsed < 1) {
-        return Number(
-            DEFAULT_SETTINGS[SETTING_KEYS.startingReceiptNumber]
-        );
-    }
-
-    return Math.floor(parsed);
 }
 
 export async function getNextReceiptNumber(): Promise<number> {
-    const value = await getSetting(
+    return getNumberSetting(
+        SETTING_KEYS.nextReceiptNumber,
+        DEFAULT_SETTINGS[
         SETTING_KEYS.nextReceiptNumber
+        ]
     );
+}
 
-    const parsed = Number(value);
+export async function getStartingCustomerNumber(): Promise<number> {
+    return getNumberSetting(
+        SETTING_KEYS.customerNumberStarting,
+        DEFAULT_SETTINGS[
+        SETTING_KEYS.customerNumberStarting
+        ]
+    );
+}
 
-    if (!Number.isFinite(parsed) || parsed < 1) {
-        return Number(
-            DEFAULT_SETTINGS[SETTING_KEYS.nextReceiptNumber]
-        );
-    }
+export async function getBasicSuitPrice(): Promise<number> {
+    return getNumberSetting(
+        SETTING_KEYS.basicSuitPrice,
+        DEFAULT_SETTINGS[
+        SETTING_KEYS.basicSuitPrice
+        ]
+    );
+}
 
-    return Math.floor(parsed);
+export async function getBasicPantPrice(): Promise<number> {
+    return getNumberSetting(
+        SETTING_KEYS.basicPantPrice,
+        DEFAULT_SETTINGS[
+        SETTING_KEYS.basicPantPrice
+        ]
+    );
+}
+
+export async function getBasicShirtPrice(): Promise<number> {
+    return getNumberSetting(
+        SETTING_KEYS.basicShirtPrice,
+        DEFAULT_SETTINGS[
+        SETTING_KEYS.basicShirtPrice
+        ]
+    );
 }
 
 export async function getReceiptWarning(): Promise<string> {

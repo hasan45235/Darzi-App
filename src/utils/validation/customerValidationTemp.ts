@@ -1,4 +1,5 @@
 export type CustomerFormInput = {
+    customerNumber: number;
     name: string;
     phone: string;
     address?: string;
@@ -8,6 +9,7 @@ export type CustomerFormInput = {
 export type CustomerValidationResult = {
     valid: boolean;
     errors: {
+        customerNumber?: string;
         name?: string;
         phone?: string;
     };
@@ -20,6 +22,14 @@ export function validateCustomer(
 
     const name = input.name.trim();
     const phone = input.phone.trim();
+
+    if (
+        !Number.isInteger(input.customerNumber) ||
+        input.customerNumber <= 0
+    ) {
+        errors.customerNumber =
+            "Customer number must be a whole number greater than 0.";
+    }
 
     if (!name) {
         errors.name = "Customer name is required.";

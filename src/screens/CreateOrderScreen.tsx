@@ -24,6 +24,7 @@ import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
+import OrderStatusBadge from "@/components/OrderStatusBadge";
 import Screen from "@/components/Screen";
 
 import {
@@ -36,19 +37,42 @@ import {
     NewOrderItem,
 } from "@/services/orderService";
 
+import {
+    getBasicPantPrice,
+    getBasicShirtPrice,
+    getBasicSuitPrice,
+} from "@/services/settingsService";
+
+import { colors } from "@/constants/theme";
+import { DEFAULT_ORDER_STATUS } from "@/constants/orderStatus";
 import { Customer } from "@/types/customer";
+import { ButtonType, DesignType } from "@/types/order";
 
 type DraftItem = NewOrderItem & {
     id: string;
 };
 
-function createEmptyItem(): DraftItem {
+// A quick-fill preset backed by the "Basic Item Prices" settings, so
+// the tailor can add a common item in one tap instead of typing its
+// name and price every time.
+type QuickFillPreset = {
+    label: string;
+    name: string;
+    price: number;
+};
+
+function createEmptyItem(preset?: {
+    name: string;
+    unitPrice: number;
+}): DraftItem {
     return {
         id: `${Date.now()}-${Math.random()}`,
-        name: "",
+        name: preset?.name ?? "",
         quantity: 1,
-        unitPrice: 0,
+        unitPrice: preset?.unitPrice ?? 0,
         notes: "",
+        designType: "simple",
+        buttonType: "simple",
     };
 }
 
@@ -116,6 +140,15 @@ export default function CreateOrderScreen() {
     const [paid, setPaid] =
         useState("");
 
+    const [discount, setDiscount] =
+        useState("");
+
+    const [addition, setAddition] =
+        useState("");
+
+    const [quickFillPresets, setQuickFillPresets] =
+        useState<QuickFillPreset[]>([]);
+
     const [loading, setLoading] =
         useState(true);
 
@@ -134,9 +167,15 @@ export default function CreateOrderScreen() {
                 const [
                     customerResult,
                     nextReceipt,
+                    suitPrice,
+                    pantPrice,
+                    shirtPrice,
                 ] = await Promise.all([
                     findCustomerById(customerId),
                     getNextOrderReceiptNumber(),
+                    getBasicSuitPrice(),
+                    getBasicPantPrice(),
+                    getBasicShirtPrice(),
                 ]);
 
                 if (!customerResult) {
@@ -147,6 +186,12 @@ export default function CreateOrderScreen() {
 
                 setCustomer(customerResult);
                 setReceiptNumber(nextReceipt);
+
+                setQuickFillPresets([
+                    { label: "+ Suit", name: "Suit", price: suitPrice },
+                    { label: "+ Pant", name: "Pant", price: pantPrice },
+                    { label: "+ Shirt", name: "Shirt", price: shirtPrice },
+                ]);
             } catch (error) {
                 console.error(
                     "Failed to prepare order:",
@@ -169,7 +214,7 @@ export default function CreateOrderScreen() {
         load();
     }, [customerId]);
 
-    const total = useMemo(() => {
+    const subtotal = useMemo(() => {
         return items.reduce(
             (sum, item) =>
                 sum +
@@ -178,6 +223,14 @@ export default function CreateOrderScreen() {
             0
         );
     }, [items]);
+
+    const discountAmount = Number(discount) || 0;
+    const additionAmount = Number(addition) || 0;
+
+    const total = Math.max(
+        subtotal - discountAmount + additionAmount,
+        0
+    );
 
     const paidAmount = Number(paid) || 0;
 
@@ -244,6 +297,14 @@ export default function CreateOrderScreen() {
             return;
         }
 
+        if (discountAmount < 0 || additionAmount < 0) {
+            Alert.alert(
+                "Invalid amount",
+                "Discount and addition cannot be negative."
+            );
+            return;
+        }
+
         if (paidAmount > total) {
             Alert.alert(
                 "Invalid payment",
@@ -268,14 +329,20 @@ export default function CreateOrderScreen() {
                             quantity,
                             unitPrice,
                             notes: itemNotes,
+                            designType,
+                            buttonType,
                         }) => ({
                             name,
                             quantity,
                             unitPrice,
                             notes: itemNotes,
+                            designType,
+                            buttonType,
                         })
                     ),
                     paid: paidAmount,
+                    discount: discountAmount,
+                    addition: additionAmount,
                 });
 
             Alert.alert(
@@ -387,6 +454,16 @@ export default function CreateOrderScreen() {
 
                     <View style={styles.field}>
                         <AppText variant="caption">
+                            Status
+                        </AppText>
+
+                        <OrderStatusBadge
+                            status={DEFAULT_ORDER_STATUS}
+                        />
+                    </View>
+
+                    <View style={styles.field}>
+                        <AppText variant="caption">
                             Delivery Date *
                         </AppText>
 
@@ -471,6 +548,28 @@ export default function CreateOrderScreen() {
                                 ])
                             }
                         />
+                    </View>
+
+                    <View style={styles.quickFillRow}>
+                        {quickFillPresets.map((preset) => (
+                            <Pressable
+                                key={preset.label}
+                                style={styles.quickFillChip}
+                                onPress={() =>
+                                    setItems((current) => [
+                                        ...current,
+                                        createEmptyItem({
+                                            name: preset.name,
+                                            unitPrice: preset.price,
+                                        }),
+                                    ])
+                                }
+                            >
+                                <AppText variant="caption">
+                                    {preset.label}
+                                </AppText>
+                            </Pressable>
+                        ))}
                     </View>
 
                     {items.map(
@@ -599,6 +698,108 @@ export default function CreateOrderScreen() {
                                         item.unitPrice}
                                 </AppText>
 
+                                <AppText variant="caption">
+                                    Design
+                                </AppText>
+
+                                <View style={styles.designTypeRow}>
+                                    {(
+                                        [
+                                            "simple",
+                                            "design",
+                                        ] as DesignType[]
+                                    ).map((option) => {
+                                        const isActive =
+                                            (item.designType ??
+                                                "simple") ===
+                                            option;
+
+                                        return (
+                                            <Pressable
+                                                key={option}
+                                                style={[
+                                                    styles.designTypeChip,
+                                                    isActive &&
+                                                    styles.designTypeChipActive,
+                                                ]}
+                                                onPress={() =>
+                                                    updateItem(
+                                                        item.id,
+                                                        {
+                                                            designType:
+                                                                option,
+                                                        }
+                                                    )
+                                                }
+                                            >
+                                                <AppText
+                                                    variant="caption"
+                                                    style={
+                                                        isActive
+                                                            ? styles.designTypeTextActive
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {option === "simple"
+                                                        ? "Simple"
+                                                        : "Design"}
+                                                </AppText>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+
+                                <AppText variant="caption">
+                                    Buttons
+                                </AppText>
+
+                                <View style={styles.designTypeRow}>
+                                    {(
+                                        [
+                                            "simple",
+                                            "fancy",
+                                        ] as ButtonType[]
+                                    ).map((option) => {
+                                        const isActive =
+                                            (item.buttonType ??
+                                                "simple") ===
+                                            option;
+
+                                        return (
+                                            <Pressable
+                                                key={option}
+                                                style={[
+                                                    styles.designTypeChip,
+                                                    isActive &&
+                                                    styles.designTypeChipActive,
+                                                ]}
+                                                onPress={() =>
+                                                    updateItem(
+                                                        item.id,
+                                                        {
+                                                            buttonType:
+                                                                option,
+                                                        }
+                                                    )
+                                                }
+                                            >
+                                                <AppText
+                                                    variant="caption"
+                                                    style={
+                                                        isActive
+                                                            ? styles.designTypeTextActive
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {option === "simple"
+                                                        ? "Simple"
+                                                        : "Fancy"}
+                                                </AppText>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+
                                 <AppInput
                                     placeholder="Item notes (optional)"
                                     value={
@@ -628,6 +829,38 @@ export default function CreateOrderScreen() {
 
                     <View style={styles.totalRow}>
                         <AppText variant="body">
+                            Subtotal
+                        </AppText>
+
+                        <AppText variant="body">
+                            {subtotal}
+                        </AppText>
+                    </View>
+
+                    <View style={styles.row}>
+                        <View style={styles.half}>
+                            <AppInput
+                                label="Discount"
+                                placeholder="0"
+                                value={discount}
+                                onChangeText={setDiscount}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+
+                        <View style={styles.half}>
+                            <AppInput
+                                label="Addition"
+                                placeholder="0"
+                                value={addition}
+                                onChangeText={setAddition}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.totalRow}>
+                        <AppText variant="body">
                             Total
                         </AppText>
 
@@ -637,6 +870,7 @@ export default function CreateOrderScreen() {
                     </View>
 
                     <AppInput
+                        label="Paid"
                         placeholder="Paid amount"
                         value={paid}
                         onChangeText={setPaid}
@@ -702,8 +936,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         borderWidth: 1,
         borderRadius: 10,
-        borderColor: "#E4E7EC",
-        backgroundColor: "#FFFFFF",
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
     },
 
     sectionHeader: {
@@ -714,12 +948,51 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
 
+    quickFillRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+        marginBottom: 8,
+    },
+
+    quickFillChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: colors.primary,
+        backgroundColor: colors.primaryLight,
+    },
+
+    designTypeRow: {
+        flexDirection: "row",
+        gap: 8,
+    },
+
+    designTypeChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+    },
+
+    designTypeChipActive: {
+        borderColor: colors.primary,
+        backgroundColor: colors.primary,
+    },
+
+    designTypeTextActive: {
+        color: colors.white,
+    },
+
     item: {
         gap: 10,
         paddingTop: 16,
         marginTop: 16,
         borderTopWidth: 1,
-        borderTopColor: "#E4E7EC",
+        borderTopColor: colors.border,
     },
 
     itemHeader: {

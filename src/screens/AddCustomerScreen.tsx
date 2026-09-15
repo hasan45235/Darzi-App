@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Alert,
     Image,
@@ -21,10 +21,12 @@ import {
     takeCustomerPhoto,
 } from "@/services/customerPhotoPicker";
 import { addCustomer } from "@/services/customerService";
+import { suggestNextCustomerNumber } from "@/services/customerNumberService";
 
 import { colors } from "@/constants/theme";
 
 export default function AddCustomerScreen() {
+    const [customerNumber, setCustomerNumber] = useState("");
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [address, setAddress] = useState("");
@@ -34,6 +36,21 @@ export default function AddCustomerScreen() {
 
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Prefill with a sensible next number - the tailor can freely type
+    // over it, since it's just a starting suggestion, not an assignment.
+    useEffect(() => {
+        suggestNextCustomerNumber()
+            .then((suggested) =>
+                setCustomerNumber(String(suggested))
+            )
+            .catch((error) =>
+                console.error(
+                    "Failed to suggest next customer number:",
+                    error
+                )
+            );
+    }, []);
 
     async function handlePickPhoto() {
         const uri = await pickCustomerPhoto();
@@ -79,6 +96,7 @@ export default function AddCustomerScreen() {
 
             await addCustomer(
                 {
+                    customerNumber: Number(customerNumber),
                     name,
                     phone,
                     address,
@@ -144,6 +162,14 @@ export default function AddCustomerScreen() {
                                 onPress={handlePhotoOptions}
                             />
                         </View>
+
+                        <AppInput
+                            label="Customer Number"
+                            placeholder="e.g. 2000"
+                            value={customerNumber}
+                            onChangeText={setCustomerNumber}
+                            keyboardType="number-pad"
+                        />
 
                         <AppInput
                             label="Name"

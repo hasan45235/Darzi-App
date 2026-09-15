@@ -1,49 +1,31 @@
-import {
-    getSetting,
-    setSetting,
-} from "@/database/repositories/settingsRepository";
+import { getDatabase } from "@/database/database.native";
+import { getStartingCustomerNumber } from "@/services/settingsService";
 
-import {
-    DEFAULT_SETTINGS,
-    SETTING_KEYS,
-} from "@/constants/settings";
+// Customer numbers are entered manually (not auto-assigned) - this is
+// only used to prefill the Add Customer form with a sensible next
+// value, floored against both the configured starting number and
+// whatever's already in the table. The tailor can freely type over it
+// before saving.
+export async function suggestNextCustomerNumber(): Promise<number> {
+    const startingValue = await getStartingCustomerNumber();
 
-export async function getNextCustomerNumber(): Promise<number> {
-    let value = await getSetting(
-        SETTING_KEYS.nextCustomerNumber
-    );
+    const db = await getDatabase();
 
-    if (value === null) {
-        const starting =
-            DEFAULT_SETTINGS[
-            SETTING_KEYS.customerNumberStarting
-            ];
-
-        await setSetting(
-            SETTING_KEYS.nextCustomerNumber,
-            starting
+    const highestCustomer =
+        await db.getFirstAsync<{
+            highest: number | null;
+        }>(
+            `
+            SELECT MAX(customer_number) AS highest
+            FROM customers
+            `
         );
 
-        value = starting;
-    }
+    const highestExisting =
+        highestCustomer?.highest ?? 0;
 
-    const number = Number(value);
-
-    if (!Number.isInteger(number) || number < 1) {
-        throw new Error(
-            "Invalid next customer number."
-        );
-    }
-
-    return number;
-}
-
-export async function advanceCustomerNumber(): Promise<void> {
-    const current =
-        await getNextCustomerNumber();
-
-    await setSetting(
-        SETTING_KEYS.nextCustomerNumber,
-        String(current + 1)
+    return Math.max(
+        startingValue || 1,
+        highestExisting + 1
     );
 }

@@ -1,51 +1,113 @@
 import {
     useCallback,
+    useMemo,
     useState,
 } from "react";
 
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
+    RefreshControl,
     StyleSheet,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
     router,
     useFocusEffect,
 } from "expo-router";
 
+import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
+import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
+import BottomNav from "@/components/BottomNav";
+import FloatingActionButton from "@/components/FloatingActionButton";
+import OrderStatusBadge from "@/components/OrderStatusBadge";
 import Screen from "@/components/Screen";
 
-import {
-    getOrders,
-} from "@/services/orderService";
+import { getCustomers } from "@/services/customerService";
+import { getOrders } from "@/services/orderService";
 
+import { colors } from "@/constants/theme";
+import { Customer } from "@/types/customer";
 import { Order } from "@/types/order";
 
 export default function OrdersScreen() {
     const [orders, setOrders] =
         useState<Order[]>([]);
 
+    const [customers, setCustomers] =
+        useState<Customer[]>([]);
+
+    const [search, setSearch] = useState("");
+
     const [loading, setLoading] =
         useState(true);
 
-    const loadOrders = useCallback(async () => {
+    const [refreshing, setRefreshing] =
+        useState(false);
+
+    const [error, setError] =
+        useState<string | null>(null);
+
+    const insets = useSafeAreaInsets();
+
+    // `silent` powers pull-to-refresh: same fetch, but it drives the
+    // small RefreshControl spinner instead of replacing the whole
+    // screen with the full-page loading state.
+    const loadOrders = useCallback(async (opts?: { silent?: boolean }) => {
         try {
-            setLoading(true);
+            if (opts?.silent) {
+                setRefreshing(true);
+            } else {
+                setLoading(true);
+            }
+            setError(null);
 
-            const result = await getOrders();
+            // Settled (not all-or-nothing): the customer list here is
+            // only used for search/display, so a failure there should
+            // never blank out the actual orders list.
+            const [ordersResult, customersResult] =
+                await Promise.allSettled([
+                    getOrders(),
+                    getCustomers(),
+                ]);
 
-            setOrders(result);
+            if (ordersResult.status === "fulfilled") {
+                setOrders(ordersResult.value);
+            } else {
+                throw ordersResult.reason;
+            }
+
+            if (customersResult.status === "fulfilled") {
+                setCustomers(customersResult.value);
+            } else {
+                console.error(
+                    "Failed to load customers for order search:",
+                    customersResult.reason
+                );
+                setCustomers([]);
+            }
         } catch (error) {
             console.error(
                 "Failed to load orders:",
                 error
             );
+
+            setError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to load orders."
+            );
         } finally {
-            setLoading(false);
+            if (opts?.silent) {
+                setRefreshing(false);
+            } else {
+                setLoading(false);
+            }
         }
     }, []);
 
@@ -55,7 +117,59 @@ export default function OrdersScreen() {
         }, [loadOrders])
     );
 
+    function handleRefresh() {
+        loadOrders({ silent: true });
+    }
+
+    const customerById = useMemo(() => {
+        const map = new Map<number, Customer>();
+
+        for (const customer of customers) {
+            map.set(customer.id, customer);
+        }
+
+        return map;
+    }, [customers]);
+
+    const filteredOrders = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        if (!query) {
+            return orders;
+        }
+
+        return orders.filter((order) => {
+            const orderCustomer = customerById.get(order.customerId);
+
+            return (
+                order.receiptNumber.toString().includes(query) ||
+                orderCustomer?.name.toLowerCase().includes(query) ||
+                orderCustomer?.phone.toLowerCase().includes(query) ||
+                orderCustomer?.customerNumber
+                    .toString()
+                    .includes(query)
+            );
+        });
+    }, [orders, search, customerById]);
+
+    // Orders always belong to a customer, so "new order" starts by
+    // picking one - same flow as the "New Order" quick action on Home.
+    function handleNewOrder() {
+        Alert.alert(
+            "Select a Customer",
+            "Choose the customer this order is for, then tap " +
+            "\"Create Order\" from their orders.",
+            [
+                {
+                    text: "OK",
+                    onPress: () => router.push("/customers"),
+                },
+            ]
+        );
+    }
+
     return (
+        <View style={[styles.screenWrapper, { paddingTop: insets.top }]}>
         <Screen>
             <View style={styles.header}>
                 <AppText variant="title">
@@ -68,7 +182,28 @@ export default function OrdersScreen() {
                 </AppText>
             </View>
 
-            {loading ? (
+            {orders.length > 0 ? (
+                <AppInput
+                    placeholder="Search by receipt #, name, or phone..."
+                    value={search}
+                    onChangeText={setSearch}
+                />
+            ) : null}
+
+            {error ? (
+                <View style={styles.center}>
+                    <AppText variant="secondary">
+                        Couldn't load orders
+                    </AppText>
+
+                    <AppText variant="caption">{error}</AppText>
+
+                    <AppButton
+                        title="Retry"
+                        onPress={loadOrders}
+                    />
+                </View>
+            ) : loading ? (
                 <View style={styles.center}>
                     <ActivityIndicator size="large" />
 
@@ -86,13 +221,31 @@ export default function OrdersScreen() {
                         Orders will appear here after they are created.
                     </AppText>
                 </View>
+            ) : filteredOrders.length === 0 ? (
+                <View style={styles.center}>
+                    <AppText variant="secondary">
+                        No orders found
+                    </AppText>
+
+                    <AppText variant="caption">
+                        Try a different receipt number, name, or phone.
+                    </AppText>
+                </View>
             ) : (
                 <FlatList
-                    data={orders}
+                    data={filteredOrders}
                     keyExtractor={(item) =>
                         item.id.toString()
                     }
                     contentContainerStyle={styles.list}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={colors.primary}
+                            colors={[colors.primary]}
+                        />
+                    }
                     renderItem={({ item }) => (
                         <AppCard
                             onPress={() =>
@@ -104,12 +257,17 @@ export default function OrdersScreen() {
                                 })
                             }
                         >
-                            <AppText variant="secondary">
-                                Receipt #{item.receiptNumber}
-                            </AppText>
+                            <View style={styles.orderHeader}>
+                                <AppText variant="secondary">
+                                    Receipt #{item.receiptNumber}
+                                </AppText>
+
+                                <OrderStatusBadge status={item.status} />
+                            </View>
 
                             <AppText variant="body">
-                                Order date: {item.orderDate}
+                                {customerById.get(item.customerId)?.name ??
+                                    "Unknown customer"}
                             </AppText>
 
                             <AppText variant="body">
@@ -123,18 +281,41 @@ export default function OrdersScreen() {
                     )}
                 />
             )}
+
+            <FloatingActionButton
+                label="New order"
+                onPress={handleNewOrder}
+            />
         </Screen>
+
+        <BottomNav />
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
+    screenWrapper: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+
     header: {
         marginBottom: 20,
     },
 
     list: {
         gap: 12,
-        paddingBottom: 24,
+        // Extra room so the last card can scroll clear of the FAB
+        // instead of sitting underneath it.
+        paddingBottom: 96,
+    },
+
+    orderHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        marginBottom: 8,
     },
 
     center: {

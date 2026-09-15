@@ -31,6 +31,8 @@ import {
     takeCustomerPhoto,
 } from "@/services/customerPhotoPicker";
 
+import { resolveCustomerImageUri } from "@/services/customerImageService";
+
 import { colors } from "@/constants/theme";
 
 export default function EditCustomerScreen() {
@@ -40,6 +42,7 @@ export default function EditCustomerScreen() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
+    const [customerNumber, setCustomerNumber] = useState("");
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [address, setAddress] = useState("");
@@ -50,6 +53,11 @@ export default function EditCustomerScreen() {
 
     const [error, setError] =
         useState<string | null>(null);
+
+    // photoUri stays as the raw value (a saved filename, a legacy
+    // absolute path, or a freshly picked cache URI) so it round-trips
+    // correctly through editCustomer(). This is only for <Image>.
+    const displayPhotoUri = resolveCustomerImageUri(photoUri);
 
     const loadCustomer = useCallback(async () => {
         try {
@@ -69,6 +77,7 @@ export default function EditCustomerScreen() {
                 throw new Error("Customer not found.");
             }
 
+            setCustomerNumber(String(customer.customerNumber));
             setName(customer.name);
             setPhone(customer.phone);
             setAddress(customer.address ?? "");
@@ -136,6 +145,7 @@ export default function EditCustomerScreen() {
             const customerId = Number(id);
 
             await editCustomer(customerId, {
+                customerNumber: Number(customerNumber),
                 name,
                 phone,
                 address,
@@ -195,9 +205,9 @@ export default function EditCustomerScreen() {
 
                     <AppCard>
                         <View style={styles.photoSection}>
-                            {photoUri ? (
+                            {displayPhotoUri ? (
                                 <Image
-                                    source={{ uri: photoUri }}
+                                    source={{ uri: displayPhotoUri }}
                                     style={styles.photo}
                                 />
                             ) : (
@@ -217,6 +227,14 @@ export default function EditCustomerScreen() {
                                 onPress={handlePhotoOptions}
                             />
                         </View>
+
+                        <AppInput
+                            label="Customer Number"
+                            placeholder="e.g. 2000"
+                            value={customerNumber}
+                            onChangeText={setCustomerNumber}
+                            keyboardType="number-pad"
+                        />
 
                         <AppInput
                             label="Name"

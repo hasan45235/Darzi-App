@@ -19,6 +19,7 @@ import {
 import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppText from "@/components/AppText";
+import OrderStatusBadge from "@/components/OrderStatusBadge";
 import Screen from "@/components/Screen";
 
 import {
@@ -160,6 +161,11 @@ export default function CustomerOrdersScreen() {
                                 </AppText>
                             </View>
 
+                            <OrderStatusBadge
+                                status={item.status}
+                                style={styles.statusBadge}
+                            />
+
                             <AppText variant="body">
                                 Delivery: {item.deliveryDate}
                             </AppText>
@@ -204,6 +210,10 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
         gap: 12,
+        marginBottom: 8,
+    },
+
+    statusBadge: {
         marginBottom: 8,
     },
 

@@ -4,12 +4,23 @@ import {
     StyleSheet,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppButton from "@/components/AppButton";
 import AppCard from "@/components/AppCard";
 import AppInput from "@/components/AppInput";
 import AppText from "@/components/AppText";
+import BottomNav from "@/components/BottomNav";
 import Screen from "@/components/Screen";
+
+import { colors } from "@/constants/theme";
+
+import {
+    getBasicPantPrice,
+    getBasicShirtPrice,
+    getBasicSuitPrice,
+    getStartingCustomerNumber,
+} from "@/services/settingsService";
 
 import {
     getBusinessAddress,
@@ -27,14 +38,41 @@ import {
 } from "@/database/repositories/settingsRepository";
 
 import {
+    getInactiveCustomers,
+    permanentlyDeleteCustomer,
+} from "@/services/customerService";
+
+import {
     SETTING_KEYS,
 } from "@/constants/settings";
 
+import { Customer } from "@/types/customer";
+
 export default function SettingsScreen() {
+    const [inactiveCustomers, setInactiveCustomers] =
+        useState<Customer[]>([]);
+
+    const [loadingInactive, setLoadingInactive] =
+        useState(true);
+
+    const [deletingCustomerId, setDeletingCustomerId] =
+        useState<number | null>(null);
+
     const [businessName, setBusinessName] = useState("");
     const [businessSubtitle, setBusinessSubtitle] = useState("");
     const [businessPhone, setBusinessPhone] = useState("");
     const [businessAddress, setBusinessAddress] = useState("");
+    const [customerNumberStarting, setCustomerNumberStarting] =
+        useState("");
+
+    const [basicSuitPrice, setBasicSuitPrice] =
+        useState("");
+
+    const [basicPantPrice, setBasicPantPrice] =
+        useState("");
+
+    const [basicShirtPrice, setBasicShirtPrice] =
+        useState("");
 
     const [currency, setCurrency] = useState("");
     const [startingReceiptNumber, setStartingReceiptNumber] =
@@ -45,9 +83,71 @@ export default function SettingsScreen() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
+    const insets = useSafeAreaInsets();
+
     useEffect(() => {
         loadSettings();
+        loadInactiveCustomers();
     }, []);
+
+    async function loadInactiveCustomers() {
+        try {
+            setLoadingInactive(true);
+
+            setInactiveCustomers(
+                await getInactiveCustomers()
+            );
+        } catch (error) {
+            console.error(
+                "Failed to load deactivated customers:",
+                error
+            );
+        } finally {
+            setLoadingInactive(false);
+        }
+    }
+
+    function handlePermanentDelete(customer: Customer) {
+        Alert.alert(
+            "Permanently Delete Customer",
+            `This will permanently delete ${customer.name} and all of ` +
+            "their orders. This cannot be undone.",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel",
+                },
+                {
+                    text: "Delete Forever",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setDeletingCustomerId(customer.id);
+
+                            await permanentlyDeleteCustomer(
+                                customer.id
+                            );
+
+                            setInactiveCustomers((current) =>
+                                current.filter(
+                                    (item) => item.id !== customer.id
+                                )
+                            );
+                        } catch (error) {
+                            Alert.alert(
+                                "Failed to delete",
+                                error instanceof Error
+                                    ? error.message
+                                    : "Something went wrong."
+                            );
+                        } finally {
+                            setDeletingCustomerId(null);
+                        }
+                    },
+                },
+            ]
+        );
+    }
 
     async function loadSettings() {
         try {
@@ -63,6 +163,10 @@ export default function SettingsScreen() {
                 currencyValue,
                 startingNumber,
                 warning,
+                customerStartingNumber,
+                suitPrice,
+                pantPrice,
+                shirtPrice,
             ] = await Promise.all([
                 getBusinessName(),
                 getBusinessSubtitle(),
@@ -71,7 +175,19 @@ export default function SettingsScreen() {
                 getCurrency(),
                 getStartingReceiptNumber(),
                 getReceiptWarning(),
+                getStartingCustomerNumber(),
+                getBasicSuitPrice(),
+                getBasicPantPrice(),
+                getBasicShirtPrice(),
             ]);
+
+            setCustomerNumberStarting(
+                String(customerStartingNumber)
+            );
+
+            setBasicSuitPrice(String(suitPrice));
+            setBasicPantPrice(String(pantPrice));
+            setBasicShirtPrice(String(shirtPrice));
 
             setBusinessName(name);
             setBusinessSubtitle(subtitle);
@@ -95,9 +211,46 @@ export default function SettingsScreen() {
     }
 
     async function saveSettings() {
+
+        const parsedCustomerNumber =
+            Number(customerNumberStarting);
+
+        const parsedSuitPrice =
+            Number(basicSuitPrice);
+
+        const parsedPantPrice =
+            Number(basicPantPrice);
+
+        const parsedShirtPrice =
+            Number(basicShirtPrice);
         const parsedStartingNumber =
             Number(startingReceiptNumber);
 
+        if (
+            !Number.isInteger(parsedCustomerNumber) ||
+            parsedCustomerNumber < 1
+        ) {
+            Alert.alert(
+                "Invalid customer number",
+                "Starting customer number must be a whole number greater than 0."
+            );
+            return;
+        }
+
+        if (
+            !Number.isFinite(parsedSuitPrice) ||
+            parsedSuitPrice < 0 ||
+            !Number.isFinite(parsedPantPrice) ||
+            parsedPantPrice < 0 ||
+            !Number.isFinite(parsedShirtPrice) ||
+            parsedShirtPrice < 0
+        ) {
+            Alert.alert(
+                "Invalid item price",
+                "Basic item prices cannot be negative."
+            );
+            return;
+        }
         if (!businessName.trim()) {
             Alert.alert(
                 "Invalid information",
@@ -105,6 +258,8 @@ export default function SettingsScreen() {
             );
             return;
         }
+
+
 
         if (
             !Number.isFinite(parsedStartingNumber) ||
@@ -125,6 +280,25 @@ export default function SettingsScreen() {
                 setSetting(
                     SETTING_KEYS.businessName,
                     businessName.trim()
+                ),
+                setSetting(
+                    SETTING_KEYS.customerNumberStarting,
+                    String(parsedCustomerNumber)
+                ),
+
+                setSetting(
+                    SETTING_KEYS.basicSuitPrice,
+                    String(parsedSuitPrice)
+                ),
+
+                setSetting(
+                    SETTING_KEYS.basicPantPrice,
+                    String(parsedPantPrice)
+                ),
+
+                setSetting(
+                    SETTING_KEYS.basicShirtPrice,
+                    String(parsedShirtPrice)
                 ),
 
                 setSetting(
@@ -176,15 +350,25 @@ export default function SettingsScreen() {
 
     if (loading) {
         return (
-            <Screen>
-                <View style={styles.loadingContainer}>
-                    <AppText>Loading settings...</AppText>
-                </View>
-            </Screen>
+            <View
+                style={[
+                    styles.screenWrapper,
+                    { paddingTop: insets.top },
+                ]}
+            >
+                <Screen>
+                    <View style={styles.loadingContainer}>
+                        <AppText>Loading settings...</AppText>
+                    </View>
+                </Screen>
+
+                <BottomNav />
+            </View>
         );
     }
 
     return (
+        <View style={[styles.screenWrapper, { paddingTop: insets.top }]}>
         <Screen scroll>
             <AppText variant="title">
                 Settings
@@ -237,6 +421,54 @@ export default function SettingsScreen() {
 
             <AppCard style={styles.card}>
                 <AppText variant="heading">
+                    Customer Settings
+                </AppText>
+
+                <View style={styles.fields}>
+                    <AppInput
+                        label="Starting Customer Number"
+                        value={customerNumberStarting}
+                        onChangeText={setCustomerNumberStarting}
+                        placeholder="e.g. 2000"
+                        keyboardType="number-pad"
+                    />
+                </View>
+            </AppCard>
+
+            <AppCard style={styles.card}>
+                <AppText variant="heading">
+                    Basic Item Prices
+                </AppText>
+
+                <View style={styles.fields}>
+                    <AppInput
+                        label="Suit Price"
+                        value={basicSuitPrice}
+                        onChangeText={setBasicSuitPrice}
+                        placeholder="e.g. 1800"
+                        keyboardType="decimal-pad"
+                    />
+
+                    <AppInput
+                        label="Pant Price"
+                        value={basicPantPrice}
+                        onChangeText={setBasicPantPrice}
+                        placeholder="e.g. 800"
+                        keyboardType="decimal-pad"
+                    />
+
+                    <AppInput
+                        label="Shirt Price"
+                        value={basicShirtPrice}
+                        onChangeText={setBasicShirtPrice}
+                        placeholder="e.g. 700"
+                        keyboardType="decimal-pad"
+                    />
+                </View>
+            </AppCard>
+
+            <AppCard style={styles.card}>
+                <AppText variant="heading">
                     Receipt Settings
                 </AppText>
 
@@ -275,11 +507,78 @@ export default function SettingsScreen() {
                 loading={saving}
                 style={styles.saveButton}
             />
+
+            <AppCard style={styles.card}>
+                <AppText variant="heading">
+                    Deactivated Customers
+                </AppText>
+
+                <AppText
+                    variant="caption"
+                    style={styles.description}
+                >
+                    Customers deleted from the Customers tab land here.
+                    Permanently deleting one also removes all of their
+                    orders - this cannot be undone.
+                </AppText>
+
+                <View style={styles.fields}>
+                    {loadingInactive ? (
+                        <AppText variant="caption">
+                            Loading...
+                        </AppText>
+                    ) : inactiveCustomers.length === 0 ? (
+                        <AppText variant="caption">
+                            No deactivated customers.
+                        </AppText>
+                    ) : (
+                        inactiveCustomers.map((customer) => (
+                            <View
+                                key={customer.id}
+                                style={styles.inactiveRow}
+                            >
+                                <View style={styles.inactiveRowText}>
+                                    <AppText variant="body">
+                                        #{customer.customerNumber} · {customer.name}
+                                    </AppText>
+
+                                    <AppText variant="caption">
+                                        {customer.phone}
+                                    </AppText>
+                                </View>
+
+                                <AppButton
+                                    title={
+                                        deletingCustomerId === customer.id
+                                            ? "Deleting..."
+                                            : "Delete Forever"
+                                    }
+                                    variant="danger"
+                                    onPress={() =>
+                                        handlePermanentDelete(customer)
+                                    }
+                                    disabled={
+                                        deletingCustomerId !== null
+                                    }
+                                />
+                            </View>
+                        ))
+                    )}
+                </View>
+            </AppCard>
         </Screen>
+
+        <BottomNav />
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
+    screenWrapper: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+
     description: {
         marginTop: 4,
         marginBottom: 20,
@@ -292,6 +591,18 @@ const styles = StyleSheet.create({
     fields: {
         marginTop: 20,
         gap: 16,
+    },
+
+    inactiveRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+    },
+
+    inactiveRowText: {
+        flex: 1,
+        gap: 2,
     },
 
     warningInput: {
